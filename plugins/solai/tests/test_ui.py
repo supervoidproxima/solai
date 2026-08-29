@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(PKG, 'skills', 'solai-scaffold'))
 from lib import decl                                                # noqa: E402
 import serve as UI                                                  # noqa: E402
 
-EXPECTED = 44
+EXPECTED = 45
 NAME = 'ui'
 
 ANS = {'name': 'T', 'remit': 'A fixture remit', 'output_language': 'en'}
@@ -132,6 +132,11 @@ def group_page(s):
 
     here = UI.count_vault(os.path.join(PKG, 'archetypes'))
     s.ok('UI-23', 'a real path is counted', here['exists'] and here['files'] > 0)
+
+    s.ok('UI-45', 'both paths a person has to name can be picked from the system dialog',
+         html.count('/api/pick') == 2
+         and 'id="btn-root-pick"' in html and 'id="btn-pick"' in html,
+         'typing a Windows path by hand is where a bring-up stalls')
 
     s.contains('UI-27', 'the folder new places are suggested under reaches the page',
                UI.render_page(PKG, key='k', base='C:/vaults'), 'C:/vaults')

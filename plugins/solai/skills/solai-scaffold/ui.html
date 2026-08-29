@@ -262,12 +262,13 @@ pre.out{background:var(--sunk);border:1px solid var(--line);border-radius:var(--
 
   <section class="step off" id="s3">
     <h2>Choose where it lives.<span class="idx">3</span></h2>
-    <p class="lede">Pick a folder. See what is already inside.</p>
+    <p class="lede">Choose the folder it goes in, or type the path. See what is already inside.</p>
     <div class="field">
       <label for="root">Folder</label>
       <div class="row">
         <input type="text" id="root" spellcheck="false" autocomplete="off"
                placeholder="C:/Users/.../Obsidian Vaults/Role">
+        <button class="fix" id="btn-root-pick" type="button">Choose...</button>
         <button class="fix" id="btn-count" type="button">Check</button>
       </div>
     </div>
@@ -546,6 +547,25 @@ function nameChanged() {
 $('#btn-count').addEventListener('click', doCount);
 $('#root').addEventListener('keydown', e => { if (e.key === 'Enter') doCount(); });
 $('#root').addEventListener('input', () => { state.pathTouched = true; voidPlan(); });
+
+// The dialog names a folder that exists, and this vault does not exist yet, so what a person
+// picks is the folder it goes in. The name from step two is appended - unless they picked a
+// folder already called that, which is what choosing an existing vault looks like.
+$('#btn-root-pick').addEventListener('click', async () => {
+  const box = $('#count-out');
+  box.replaceChildren(el('p', {class: 'msg'}, 'the dialog is open on your desktop...'));
+  const {data} = await api('/api/pick', {kind: 'folder'});
+  box.replaceChildren();
+  if (data.error) { box.append(el('p', {class: 'msg bad'}, data.error)); return; }
+  if (data.cancelled) return;
+  const name = $('#pname').value.trim();
+  const picked = String(data.path).replace(/[\\/]+$/, '');
+  const tail = picked.split(/[\\/]/).pop();
+  $('#root').value = (name && tail !== name) ? joinPath(picked, name) : picked;
+  state.pathTouched = true;
+  voidPlan();
+  doCount();
+});
 
 async function doCount() {
   const box = $('#count-out');
