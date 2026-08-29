@@ -46,6 +46,36 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# Native tools write progress and notices to stderr. Under 'Stop' that becomes a terminating
+# error and the script dies on a line that was not a failure at all: on a fresh machine the
+# Python launcher announces "Python install manager was successfully updated" and killed the
+# whole run. Under PowerShell 7 one preference switches the behaviour off; under Windows
+# PowerShell 5.1 - which is what `irm | iex` uses - there is no such switch, so every native
+# call goes through Invoke-Native, which lowers the preference for the duration and decides
+# success by exit code.
+if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+  $PSNativeCommandUseErrorActionPreference = $false
+}
+$script:NativeExit = 0
+function Invoke-Native {
+  param(
+    [Parameter(Mandatory)] [string] $Exe,
+    [Parameter(ValueFromRemainingArguments = $true)] [string[]] $Arguments
+  )
+  $saved = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $out = & $Exe @Arguments 2>&1
+    $script:NativeExit = $LASTEXITCODE
+  } catch {
+    $out = $_.Exception.Message
+    $script:NativeExit = 1
+  } finally {
+    $ErrorActionPreference = $saved
+  }
+  return (($out | Out-String).Trim())
+}
+
 # --------------------------------------------------------------------------- reporting
 $script:Stage   = 0
 $script:Total   = 8
@@ -110,30 +140,46 @@ foreach ($o in @(
   if (Test-Path $o) { $obsidian = $o; break }
 }
 
+# `python` on a bare Windows machine is often the Store app-execution alias: it is on PATH, it
+# answers, and it is not an interpreter. Believe a version only when it looks like one, and try
+# the py launcher before giving up.
+$pyVersion = $null
+$pyExe     = $null
+foreach ($candidate in @(@('python', @('-c', "import sys;print('%d.%d' % sys.version_info[:2])")),
+                         @('py',     @('-3', '-c', "import sys;print('%d.%d' % sys.version_info[:2])")))) {
+  if (-not (Have $candidate[0])) { continue }
+  $reported = Invoke-Native $candidate[0] @($candidate[1])
+  $match = [regex]::Match($reported, '(?m)^\s*(\d+\.\d+)\s*$')
+  if ($script:NativeExit -eq 0 -and $match.Success) {
+    $pyVersion = $match.Groups[1].Value
+    $pyExe     = $candidate[0]
+    break
+  }
+}
+$pyOk = [bool]($pyVersion -and ([version]$pyVersion -ge [version]'3.11'))
+
 $present = [ordered]@{
   'winget'      = (Have 'winget')
   'git'         = (Have 'git')
-  'python'      = (Have 'python')
+  'python 3.11+'= $pyOk
   'gh'          = (Have 'gh')
   'claude'      = (Have 'claude')
   'Obsidian'    = ($null -ne $obsidian)
   '~/.claude'   = (Test-Path $claudeDir)
-  'vault root'  = ($vaultRoot -and (Test-Path $vaultRoot))
+  'vault root'  = [bool]($vaultRoot -and (Test-Path $vaultRoot))
 }
 foreach ($k in $present.Keys) {
   Say $(if ($present[$k]) { 'ok' } else { 'missing' }) $k
+}
+if ($pyVersion) {
+  Say $(if ($pyOk) { 'ok' } else { 'action' }) ("python {0}, via {1}" -f $pyVersion, $pyExe)
+} elseif (Have 'python') {
+  Say 'action' 'python is on PATH but does not answer: the Microsoft Store alias, not an interpreter'
 }
 
 if (-not $present['winget']) {
   Say 'failed' 'winget is required and is not on PATH. Install App Installer from the Microsoft Store, then run this again.'
   return
-}
-
-$pyOk = $false
-if ($present['python']) {
-  $v = (& python -c "import sys;print('%d.%d' % sys.version_info[:2])" 2>$null)
-  $pyOk = $v -and ([version]$v -ge [version]'3.11')
-  Say $(if ($pyOk) { 'ok' } else { 'action' }) ("python {0} (3.11 or newer required)" -f $v)
 }
 
 if ($DryRun) {
@@ -156,10 +202,15 @@ if ($SkipApps) {
   )
   foreach ($p in $packages) {
     if ($p.Have) { Say 'ok' $p.Name; continue }
-    Write-Host ("      installing  {0} ..." -f $p.Name) -ForegroundColor DarkGray
-    & winget install --id $p.Id --exact --silent --accept-package-agreements --accept-source-agreements | Out-Null
-    if ($LASTEXITCODE -eq 0) { Say 'installed' $p.Name }
-    else { Need ("install {0} by hand: winget install --id {1}" -f $p.Name, $p.Id) }
+    Write-Host ("      installing  {0} - approve the elevation prompt when Windows asks ..." -f $p.Name) -ForegroundColor DarkGray
+    $null = Invoke-Native 'winget' 'install' '--id' $p.Id '--exact' '--silent' '--accept-package-agreements' '--accept-source-agreements'
+    switch ($script:NativeExit) {
+      0       { Say 'installed' $p.Name }
+      # 1602 is the MSI code for "cancelled at the prompt", which on this path means the UAC
+      # dialog was dismissed rather than anything being wrong with the package.
+      1602    { Need ("{0}: the elevation prompt was dismissed. Run: winget install --id {1}" -f $p.Name, $p.Id) }
+      default { Need ("install {0} by hand (exit {2}): winget install --id {1}" -f $p.Name, $p.Id, $script:NativeExit) }
+    }
   }
   Say 'ok' 'PATH changes take effect in a new terminal'
 }
@@ -168,13 +219,14 @@ if ($SkipApps) {
 Write-Stage 'Claude Code'
 
 if (Have 'claude') {
-  Say 'ok' ("already installed: " + (& claude --version))
+  Say 'ok' ("already installed: " + (Invoke-Native 'claude' '--version'))
 } else {
+  # The native installer needs no elevation and keeps itself updated afterwards.
   irm https://claude.ai/install.ps1 | iex
   $local = Join-Path $env:USERPROFILE '.local\bin'
   if (Test-Path (Join-Path $local 'claude.exe')) {
     $env:Path = "$local;$env:Path"
-    Say 'installed' (& claude --version)
+    Say 'installed' (Invoke-Native 'claude' '--version')
   } else {
     Need 'install Claude Code by hand: irm https://claude.ai/install.ps1 | iex'
   }
@@ -191,20 +243,20 @@ $registered = (Test-Path $known) -and ((Get-Content $known -Raw) -match '"solai"
 if (-not (Have 'claude')) {
   Need ('register the plugin once Claude Code is installed: /plugin marketplace add ' + $PackageRepo)
 } elseif ($registered) {
-  & claude plugin marketplace update solai 2>&1 | Out-Null
+  $null = Invoke-Native 'claude' 'plugin' 'marketplace' 'update' 'solai'
   Say 'ok' 'marketplace already registered, updated'
 } else {
-  & claude plugin marketplace add $PackageRepo 2>&1 | Out-Null
-  if ($LASTEXITCODE -eq 0) { Say 'installed' ("marketplace " + $PackageRepo) }
+  $null = Invoke-Native 'claude' 'plugin' 'marketplace' 'add' $PackageRepo
+  if ($script:NativeExit -eq 0) { Say 'installed' ("marketplace " + $PackageRepo) }
   else { Need ("run in a Claude Code session: /plugin marketplace add " + $PackageRepo) }
 
-  & claude plugin install solai@solai 2>&1 | Out-Null
-  if ($LASTEXITCODE -eq 0) { Say 'installed' 'plugin solai@solai' }
+  $null = Invoke-Native 'claude' 'plugin' 'install' 'solai@solai'
+  if ($script:NativeExit -eq 0) { Say 'installed' 'plugin solai@solai' }
   else { Need 'run in a Claude Code session: /plugin install solai@solai' }
 }
 
 if (Have 'claude') {
-  $installed = (& claude plugin list 2>&1 | Out-String)
+  $installed = Invoke-Native 'claude' 'plugin' 'list'
   Say $(if ($installed -match 'solai') { 'ok' } else { 'action' }) 'claude plugin list reports solai'
 }
 
@@ -224,30 +276,42 @@ if (Test-Path $configMarker) {
   $answer = Read-Host ("      restore the private configuration from {0}? (y/N)" -f $ConfigRepo)
   if ($answer -notmatch '^(y|yes)$') {
     Say 'skipped' 'no private configuration'
-  } elseif (-not (Have 'gh')) {
-    Need 'install GitHub CLI, then run this script again'
+  } elseif (-not (Have 'git')) {
+    Need 'install Git, then run this script again'
   } else {
-    $status = (& gh auth status 2>&1 | Out-String)
-    if ($status -notmatch 'Logged in') {
-      Write-Host '      a browser will open for a device code' -ForegroundColor DarkGray
-      & gh auth login
+    # Git for Windows bundles Git Credential Manager, which signs in through the browser and
+    # needs no elevation. The GitHub CLI is used only if it happens to be here and logged in:
+    # its installer is machine-wide, and on a locked-down machine it cannot be installed at all.
+    $helper = @()
+    if (Have 'gh') {
+      $status = Invoke-Native 'gh' 'auth' 'status'
+      if ($status -match 'Logged in') {
+        $helper = @('-c', 'credential.helper=', '-c', 'credential.helper=!gh auth git-credential')
+        Say 'ok' 'authenticating through the GitHub CLI'
+      }
+    }
+    if ($helper.Count -eq 0) {
+      Say 'ok' 'authenticating through Git Credential Manager: a browser window will open once'
     }
     # ~/.claude already exists (Claude Code made it), so `git clone` would refuse. Fetch into it.
     New-Item -ItemType Directory -Force -Path $claudeDir | Out-Null
     Push-Location $claudeDir
     try {
-      if (-not (Test-Path (Join-Path $claudeDir '.git'))) { & git init --quiet }
-      $remotes = (& git remote 2>$null) -join ' '
-      if ($remotes -notmatch 'origin') {
-        & git remote add origin ("https://github.com/{0}.git" -f $ConfigRepo)
+      if (-not (Test-Path (Join-Path $claudeDir '.git'))) { $null = Invoke-Native 'git' 'init' '--quiet' }
+      $remotes = Invoke-Native 'git' 'remote'
+      if ($remotes -notmatch '(?m)^origin$') {
+        $null = Invoke-Native 'git' 'remote' 'add' 'origin' ("https://github.com/{0}.git" -f $ConfigRepo)
       }
-      & git -c credential.helper= -c credential.helper='!gh auth git-credential' fetch --quiet origin
-      $branch = (& git remote show origin 2>$null | Select-String 'HEAD branch:' | ForEach-Object { ($_ -split ':')[1].Trim() })
+      $null = Invoke-Native 'git' @($helper + @('fetch', '--quiet', 'origin'))
+      if ($script:NativeExit -ne 0) { throw 'fetch failed' }
+      $remoteInfo = Invoke-Native 'git' @($helper + @('remote', 'show', 'origin'))
+      $branch = ([regex]::Match($remoteInfo, 'HEAD branch:\s*(\S+)')).Groups[1].Value
       if (-not $branch) { $branch = 'main' }
-      & git checkout -f -B $branch ("origin/{0}" -f $branch) --quiet
+      $null = Invoke-Native 'git' 'checkout' '-f' '-B' $branch ("origin/{0}" -f $branch) '--quiet'
+      if ($script:NativeExit -ne 0) { throw 'checkout failed' }
       Say 'installed' ("configuration restored from {0} ({1})" -f $ConfigRepo, $branch)
     } catch {
-      Need ("restore the configuration by hand: gh repo clone {0}" -f $ConfigRepo)
+      Need ("restore the configuration by hand: git clone https://github.com/{0}.git" -f $ConfigRepo)
     } finally {
       Pop-Location
     }
@@ -289,13 +353,16 @@ if (-not $onedrive) {
 # --------------------------------------------------------------------------- 7. doctor
 Write-Stage 'doctor'
 
-if (Have 'claude') { & claude doctor 2>&1 | Select-Object -First 12 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray } }
+if (Have 'claude') {
+  (Invoke-Native 'claude' 'doctor') -split "`r?`n" | Select-Object -First 12 |
+    ForEach-Object { Write-Host ("      " + $_) -ForegroundColor DarkGray }
+}
 
 $pkg = Join-Path $marketDir 'plugins\solai'
 if (-not (Test-Path $pkg)) { $pkg = Join-Path $claudeDir 'solai\plugins\solai' }
 $runner = Join-Path $pkg 'tests\run_tests.py'
-if ((Test-Path $runner) -and (Have 'python')) {
-  $out = (& python $runner 2>&1 | Out-String)
+if ((Test-Path $runner) -and $pyExe) {
+  $out = Invoke-Native $pyExe $runner
   $line = ($out -split "`n" | Where-Object { $_ -match 'assertions passed' } | Select-Object -First 1)
   if (-not $line) { $line = 'test runner produced no count line' }
   Say $(if ($out -match 'GREEN') { 'ok' } else { 'action' }) ("$line".Trim())
@@ -309,10 +376,11 @@ Write-Stage 'the guided page'
 $serve = Join-Path $pkg 'skills\solai-scaffold\serve.py'
 if ($NoHandoff) {
   Say 'skipped' '-NoHandoff'
-} elseif ((Test-Path $serve) -and (Have 'python')) {
+} elseif ((Test-Path $serve) -and $pyExe) {
   Say 'ok' 'opening the guided page. Close it with Ctrl+C when you are done.'
-  if ($vaultRoot) { & python $serve --vaults $vaultRoot }
-  else { & python $serve }
+  # Not through Invoke-Native: this one is meant to stay in the foreground and print as it goes.
+  if ($vaultRoot) { & $pyExe $serve --vaults $vaultRoot }
+  else { & $pyExe $serve }
 } else {
   Need 'start the guided page by hand: py <package>\skills\solai-scaffold\serve.py'
 }
