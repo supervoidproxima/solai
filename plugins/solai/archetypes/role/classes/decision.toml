@@ -1,0 +1,139 @@
+schema = 1
+
+# A decision records a choice made in the role that would otherwise be re-taken from scratch by
+# you in six months or by whoever holds the role after you. It is the class most at risk of
+# becoming a diary, so it is gated: a card here has to name the authority it was taken under and
+# what it displaces. A choice that displaced nothing and rested on nothing was a description of
+# what was already happening.
+
+class     = "decision"
+prefix    = "DEC"
+folder    = "decisions"
+skill     = "decision"
+title     = "Decision"
+purpose   = "One decision taken in the role: under whose authority, what it displaces, and what undoing it would cost."
+minted_by = "skill:decision"
+
+[status]
+lifecycle = ["taken", "contested"]
+terminal  = ["reversed", "superseded", "expired"]
+default   = "taken"
+
+[status.notes]
+"taken"      = "in force. The normal state, and it does not need defending to sit here."
+"contested"  = "someone with standing has objected. Names them and the ground of the objection. Not a softer word for reversed: a contested decision is still in force, and recording the objection while it stands is the whole value of the state."
+"reversed"   = "undone. The card stays, because the reason it was taken is exactly what stops it being taken again by someone who never heard the argument."
+"superseded" = "a later decision replaced it, named. Different from reversed: the question was answered again, not abandoned."
+"expired"    = "it was bounded in time and the time passed. Nobody decided anything; recording it as reversed would credit a decision nobody made."
+
+[status.rules]
+terminal_callout        = true
+terminal_relaxes_schema = false
+
+# --------------------------------------------------------------------------- fields
+
+[[fields]]
+name     = "decision"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "What was decided, in one sentence, in the form that would be read out. `Diagnostics run before the first session, never after` is a decision. `Reviewed the diagnostics question` is a minute."
+
+[[fields]]
+name     = "authority"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The power it was taken under: a clause, a delegation, or your own discretion. Own discretion is a legitimate answer and a visible one; an unstated authority is what turns a decision into an argument the next time it matters."
+
+[[fields]]
+name     = "taken-on"
+type     = "date"
+card     = "1"
+required = true
+meaning  = "When it was taken. Required because a decision without a date cannot be ordered against the ones that came before it, and ordering is most of the reason to keep them."
+
+[[fields]]
+name       = "reversal-cost"
+type       = "enum"
+card       = "1"
+required   = true
+values     = ["cheap", "costly", "irreversible"]
+no_default = true
+meaning    = "What undoing it would cost. No default, deliberately: the cheap ones can be made fast and alone, the irreversible ones cannot, and a silent middle value on every card hides which is which."
+
+[[fields]]
+name    = "displaces"
+type    = "scalar"
+card    = "0..1"
+meaning = "The practice or the earlier decision this replaces. Empty is allowed and is a question to yourself: if it displaced nothing, it may be a description rather than a decision."
+
+[[fields]]
+name    = "area"
+type    = "list<wl>"
+card    = "0..N"
+source  = "partition"
+meaning = "Which areas of the role it governs. Empty means all of them, which for a decision is a strong claim worth making on purpose."
+
+# --------------------------------------------------------------------------- links
+
+[[links]]
+field   = "obligation"
+target  = "obligation"
+card    = "0..N"
+kind    = "one-way"
+meaning = "What the decision was taken under. One-way: the child names the parent, and an obligation does not keep a list of every choice made beneath it."
+
+[[links]]
+field   = "deliverable"
+target  = "deliverable"
+card    = "0..N"
+kind    = "one-way"
+meaning = "What carried the decision out, where something did. A decision nothing carries out is a position, and after long enough it is a position nobody is following."
+
+[[links]]
+field   = "related"
+target  = "decision"
+card    = "0..N"
+kind    = "lateral"
+meaning = "A decision this one rests on, or one it sits awkwardly beside. Two decisions that cannot both be followed belong here, named, rather than discovered by whoever tries."
+
+# --------------------------------------------------------------------------- body
+
+[body]
+required_h2 = ["## The decision",
+               "## Under what authority",
+               "## What it displaces",
+               "## What it would cost to reverse"]
+optional_h2 = ["## Who contested it", "## What was rejected"]
+sources_h3  = "### Sources"
+cite_style  = "footnotes"
+
+# `## What was rejected` is optional and it is the section worth writing. A decision recorded
+# without its rejected alternative reads, later, as the only thing anyone could have done.
+
+# --------------------------------------------------------------------------- view
+
+[view]
+columns = ["file.name", "decision", "status", "authority", "taken-on", "reversal-cost",
+           "displaces", "obligation", "area", "tags"]
+
+[[view.sort]]
+property  = "taken-on"
+direction = "DESC"
+
+[[view.sort]]
+property  = "status"
+direction = "ASC"
+
+# --------------------------------------------------------------------------- skill
+
+[card-skill]
+modes    = ["single"]
+shared   = ["status-protocol", "card-concision", "block-id-protocol"]
+rubrics  = ["reversal-cost"]
+triggers = ["record a decision taken in the role", "log why we do it this way"]
+induces  = "minute-taking"
+
+# Single mode only. Sweeping a transcript for decisions produces a card per moment somebody
+# sounded decisive, and a folder of those is the diary this class is gated against becoming.

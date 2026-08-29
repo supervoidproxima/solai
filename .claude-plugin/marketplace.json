@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "solai",
+  "description": "The marketplace holding the solai vault package.",
+  "owner": {
+    "name": "Arman Sultanov"
+  },
+  "plugins": [
+    {
+      "name": "solai",
+      "description": "Bootstraps, audits and adopts Obsidian vaults: archetype scaffolding, card classes declared once and projected everywhere, tiered governance, read-only conformance probe for existing vaults.",
+      "author": {
+        "name": "Arman Sultanov"
+      },
+      "category": "productivity",
+      "source": "./plugins/solai"
+    }
+  ]
+}

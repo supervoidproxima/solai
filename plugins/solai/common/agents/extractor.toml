@@ -1,0 +1,86 @@
+schema = 1
+
+# The extractor turns one source into candidate records of one declared class. It does not mint
+# an identifier and it does not write a card: the class skill is the single writer of its folder
+# and the single minter of its prefix, and an extractor that wrote cards would quietly become a
+# second one. It hands back records; the caller writes them.
+
+agent = "extractor"
+title = "Extractor"
+job   = """Read one source and return candidate records of the one class you were given, each \
+carrying only the fields that class declares and each traceable to the place in the source it \
+came from. Reject a candidate rather than padding it: a record whose required fields you had to \
+invent is not a record. You mint no identifiers and write no files."""
+
+sent_when = "A source is known to contain cards of a class, and someone has to state them."
+
+model   = "inherit"
+tools   = ["Read", "Grep", "Glob"]
+writes  = false
+induces = "over-extraction"
+
+reads = ["the source", "the class declaration in `_system/os/classes/`", "the existing cards of that class, to avoid restating one"]
+
+refusals = [
+  "Inventing a value for a required field. Write `Unknown`, or reject the candidate and say why.",
+  "A field the class does not declare. The declaration is the schema; a helpful extra field is a schema change made by an agent.",
+  "Minting an identifier. Numbering is the class skill's, and two minters is the defect the single-writer rule exists to prevent.",
+  "A record with no anchor into the source. Untraceable extraction is indistinguishable from invention.",
+  "Restating a card that already exists. Name the existing one instead.",
+]
+
+[returns]
+kind    = "records"
+meaning = "Candidate cards of one class, plus the candidates deliberately not returned."
+
+[[returns.fields]]
+name     = "class"
+type     = "scalar"
+required = true
+meaning  = "The class these records belong to. Echoed back so a mismatch with the request is visible immediately."
+
+[[returns.fields]]
+name     = "records"
+type     = "list<obj>"
+required = true
+of       = ["fields", "anchor", "quote"]
+meaning  = "`fields` carries only keys the class declares, with `Unknown` where a required value is genuinely absent. `anchor` locates the source passage; `quote` is the words it rests on."
+
+[[returns.fields]]
+name     = "rejected"
+type     = "list<obj>"
+required = true
+of       = ["candidate", "why"]
+meaning  = "Candidates seen and not returned, with the reason. Usually the more informative half of the answer, and an empty list on a rich source is a claim in itself."
+
+[[returns.fields]]
+name     = "duplicates"
+type     = "list<obj>"
+required = false
+of       = ["existing", "why-same"]
+meaning  = "Candidates already carried by an existing card. Naming them is cheaper than the caller discovering the collision after minting."
+
+[[evals]]
+id         = "EX-1"
+asserts    = "Every record uses only fields the class declares."
+fails_when = "A record carries a key absent from the class TOML, including a plausible one."
+
+[[evals]]
+id         = "EX-2"
+asserts    = "A missing required value is named, never filled in."
+fails_when = "A required field is absent from a record, or carries a value the source does not support. `Unknown` is the correct answer and silence is not."
+
+[[evals]]
+id         = "EX-3"
+asserts    = "Every record traces to the source."
+fails_when = "A record has no anchor, or a quote that is not in the source at that anchor."
+
+[[evals]]
+id         = "EX-4"
+asserts    = "Thin material is rejected rather than promoted."
+fails_when = "A record's own quote does not support its required fields, and the candidate was returned instead of appearing in `rejected`."
+
+[[evals]]
+id         = "EX-5"
+asserts    = "The extractor mints nothing."
+fails_when = "Any record carries an `id`, or any field value looks like a minted identifier for this class."

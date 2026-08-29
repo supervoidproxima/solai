@@ -1,0 +1,257 @@
+schema    = 1
+archetype = "role"
+title     = "Role"
+summary   = "A role you have taken up: what it owes, what leaves because of it, and what you decided along the way. Three classes on one line - obligation, deliverable, decision - and a folder for the documents that impose the first."
+
+# Top-level keys must precede the first table header. In TOML a bare key after `[ids]`
+# belongs to `ids`, and the failure is silent: the archetype loads with zero classes.
+classes = ["obligation", "deliverable", "decision"]
+lookups = []
+
+# All four. A role is defined by documents it did not write and reads them cold (scout,
+# extractor); an obligation is a reading of a clause and someone senior may read it
+# differently (refuter); and every deliverable is prose a person outside the place judges
+# (editor).
+agents = ["scout", "refuter", "extractor", "editor"]
+
+# Two. The constitutive documents arrive as a batch to be read down into obligations
+# (intake), and everything that leaves is read by someone who did not write it (polish).
+# Review wants a standing body of findings to attack; a role has deliverables instead.
+workflows = ["intake", "polish"]
+
+# Three classes and no more, and they sit on one line: what is owed -> what left against it ->
+# what was decided doing it. A promise made to a person is NOT a fourth class - it is a
+# deliverable in `promised`, because a promise and the thing promised are one object at two
+# moments, and splitting them makes two cards with nothing comparing them (D3). Anything that
+# moves none of the three is a note in `sources/` or `people/`.
+
+[interview]
+asks = ["mode", "root", "name", "remit", "output_language",
+        "content_languages", "filename_language",
+        "governance_tier", "classes", "partition", "first_artefact"]
+
+[interview.defaults]
+# The opening line of the place, offered rather than imposed: the page fills it in
+# and stops the moment anyone edits it. A blank first field is a stall, and a
+# sentence nobody wrote is at least the sentence this type is for.
+first_artefact  = "The list of what this role owes, handed to whoever appointed it."
+remit           = "Everything this role owes, produces and decides, in one place."
+governance_tier = "standard"
+changes_folder  = "changes"
+
+[interview.partition]
+prompt  = "Optional. Short codes for your areas of responsibility - most people leave this blank until the obligations show what the areas actually are."
+example = ["METHOD", "SCHOOLS", "REPORTING"]
+binds   = "area"
+
+# The partition binds to `area`, not `stream` or `track`. A role is split by what it answers
+# for, not by a value stream it happens to touch and not by parallel bets: areas are named in
+# the document that appointed you, and borrowing either other word would import a vocabulary
+# that says something the appointment does not.
+
+[ids]
+card          = "^[A-Z]{3}-[0-9]{3}$"
+change        = "^CHG-[0-9]{3}$"
+date          = "YYYY-MM-DD"
+property-case = "kebab"
+file-case     = "kebab"
+block-id      = "^\\^[0-9a-f]{6}$"
+
+
+# --------------------------------------------------------------------------- folders
+
+[[folders]]
+path = "charter"
+purpose = "what constitutes the role: the job description, the order appointing you, the regulations that bind it. Read-only once onboarded"
+[[folders]]
+path = "plans"
+purpose = "what the role is measured against this period. Superseded rather than edited, so last year's target stays readable"
+[[folders]]
+path = "obligations"
+purpose = "one card per thing the role owes, each traced to the document or the instruction that imposes it"
+[[folders]]
+path = "deliverables"
+purpose = "one card per thing that leaves, promised or sent. The only evidence the role produced anything"
+[[folders]]
+path = "decisions"
+purpose = "one card per decision taken in the role, with the authority it was taken under"
+[[folders]]
+path = "sources"
+purpose = "what arrived from outside and informs the work without constituting the role. Read-only once onboarded"
+[[folders]]
+path = "people"
+purpose = "who the role deals with: one note each, what they hold and what they have asked for. Notes, not cards - a person is not a unit of work"
+[[folders]]
+path = "changes"
+purpose = "change records, immutable once written"
+[[folders]]
+path = "_inbox"
+purpose = "unprocessed capture. Cleared, not archived"
+[[folders]]
+path = "_system"
+purpose = "vault infrastructure"
+[[folders]]
+path = "_system/scripts"
+purpose = "generators and checks, with a run-order contract in the readme"
+[[folders]]
+path = "_system/handoff"
+purpose = "session handoff notes, written at half context"
+[[folders]]
+path = "_system/runs"
+purpose = "dated audit output. Ephemeral and regenerable"
+[[folders]]
+path = "_system/os"
+purpose = "engine state. Out of scope of the vault's own governance"
+
+# `charter/` rather than `mandate/`: the operator's own lexicon bans the word, and an English
+# folder name would still pull the calque into the Russian prose written beside it.
+
+# --------------------------------------------------------------------------- artefacts
+
+[[artefacts]]
+id      = "claude-md"
+path    = "CLAUDE.md"
+mode    = "merged"
+emitter = "claudemd"
+regions = ["header", "purpose", "language", "constraints", "id-standard", "card-index",
+           "loop", "structure", "frontmatter", "naming", "citation", "handoff",
+           "change-discipline", "honesty"]
+generated = ["language", "id-standard", "card-index", "loop", "structure",
+             "frontmatter", "naming", "citation"]
+
+[[artefacts]]
+id      = "data-dictionary"
+path    = "_system/data-dictionary.md"
+mode    = "merged"
+emitter = "classes"
+regions = ["status-matrix", "enums", "derived", "schemas", "link-rules"]
+generated = ["status-matrix", "enums", "derived", "schemas", "link-rules"]
+
+[[artefacts]]
+id      = "vocabulary"
+path    = "_system/vocabulary.md"
+mode    = "merged"
+emitter = "vocabulary"
+regions = ["keys"]
+generated = ["keys"]
+
+[[artefacts]]
+id      = "start-here"
+path    = "START-HERE.md"
+mode    = "generated"
+emitter = "starthere"
+
+[[artefacts]]
+id      = "bond"
+path    = "_system/os/vault.md"
+mode    = "generated"
+emitter = "bond"
+
+[[artefacts]]
+id      = "state"
+path    = "_system/state.md"
+mode    = "seeded"
+fragment = "system/state.md"
+
+[[artefacts]]
+id      = "registry-base"
+path    = "registry.base"
+mode    = "generated"
+emitter = "bases"
+
+[[artefacts]]
+id      = "dashboard"
+path    = "dashboard.html"
+mode    = "generated"
+emitter = "dashboard"
+
+[[artefacts]]
+id      = "card-skills"
+path    = ".claude/skills/{skill}/SKILL.md"
+mode    = "merged"
+emitter = "cardskill"
+foreach = "classes"
+regions = ["frontmatter", "step-id", "step-fields", "step-body", "step-write"]
+generated = ["frontmatter", "step-id", "step-fields", "step-body", "step-write"]
+
+[[artefacts]]
+id    = "shared"
+path  = ".claude/skills/_shared/"
+mode  = "copied"
+from  = "shared/"
+files = ["status-protocol.md", "card-concision.md", "block-id-protocol.md"]
+
+[[artefacts]]
+id    = "scripts"
+path  = "_system/scripts/"
+mode  = "copied"
+from  = "runtime/"
+files = ["check_links.py", "stamp_check.py", "validate_cards.py", "gen_dashboard.py", "check_agents.py"]
+
+[[artefacts]]
+id       = "chg-001"
+path     = "changes/CHG-001.md"
+mode     = "seeded"
+fragment = "chg/chg-001.md"
+bootstrap = true
+
+[[artefacts]]
+id      = "agents"
+path    = ".claude/agents/{agent}.md"
+mode    = "merged"
+emitter = "agent"
+foreach = "agents"
+regions = ["frontmatter", "job", "returns", "evals"]
+generated = ["frontmatter", "job", "returns", "evals"]
+
+[[artefacts]]
+id      = "workflows"
+path    = ".claude/workflows/{workflow}.js"
+mode    = "merged"
+emitter = "workflow"
+foreach = "workflows"
+regions = ["meta", "script"]
+generated = ["meta", "script"]
+
+# --------------------------------------------------------------------------- loop
+
+[[loop]]
+n = 1
+name = "read the constitutive documents down into obligations, one card per clause that binds"
+skill = "/obligation"
+out = "obligations/"
+[[loop]]
+n = 2
+name = "confirm the reading with whoever can say it is wrong"
+skill = "/obligation"
+out = "obligations/"
+[[loop]]
+n = 3
+name = "promise one thing, to a named person, with a date"
+skill = "/deliverable"
+out = "deliverables/"
+[[loop]]
+n = 4
+name = "send it. Nothing else on this list is evidence"
+skill = "/deliverable"
+out = "deliverables/"
+[[loop]]
+n = 5
+name = "record the decision the work forced, before anyone has to re-take it"
+skill = "/decision"
+out = "decisions/"
+[[loop]]
+n = 6
+name = "check links, statuses and stamps"
+skill = "/solai check"
+out = "_system/runs/"
+[[loop]]
+n = 7
+name = "name every standing obligation nothing left against this period. Silence is a state"
+skill = "-"
+out = "_system/runs/"
+[[loop]]
+n = 8
+name = "record what changed and why"
+skill = "/solai change"
+out = "changes/"

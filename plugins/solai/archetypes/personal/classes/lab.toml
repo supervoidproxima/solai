@@ -1,0 +1,111 @@
+schema = 1
+
+# A lab result is a measurement taken on a date by someone who is not you. Its value is that
+# it can be compared to the one before it, which is the whole reason it is a card and not a
+# note: a card has a date, a panel and a provider in the same place every time.
+
+class     = "lab"
+prefix    = "LAB"
+folder    = "wellbeing/labs"
+skill     = "lab"
+title     = "Lab result"
+purpose   = "One panel of results, on one date, from one provider. The original stays beside the card; the card holds what can be compared."
+minted_by = "skill:lab"
+
+[status]
+lifecycle = ["recorded"]
+terminal  = ["superseded"]
+default   = "recorded"
+
+[status.notes]
+"recorded"   = "the result is filed and its numbers are readable in the card. This is the normal state and most cards never leave it."
+"superseded" = "a re-test on the same panel corrected this one, or the result was withdrawn by the lab. Kept, because a corrected result is itself a fact about the record."
+
+[status.rules]
+terminal_callout        = true
+terminal_relaxes_schema = true
+
+# --------------------------------------------------------------------------- fields
+
+[[fields]]
+name     = "panel"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "What was measured, in the name the provider used. Not a translation: a panel renamed is a panel that cannot be matched to its own history."
+
+[[fields]]
+name     = "provider"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The laboratory or clinic that ran it. Reference ranges differ between providers, so a value without its provider cannot be compared."
+
+[[fields]]
+name     = "ordered-by"
+type     = "scalar"
+card     = "0..1"
+meaning  = "The clinician who asked for it, with their speciality where it is not obvious. Empty when it was self-ordered."
+
+[[fields]]
+name    = "fasting"
+type    = "bool"
+card    = "0..1"
+meaning = "Whether the sample was taken fasted. Several common analytes are not interpretable without it."
+
+[[fields]]
+name     = "source"
+type     = "scalar"
+card     = "0..1"
+meaning  = "The filed original: the PDF or scan this card was read from. A number with no original behind it is a memory, not a record."
+
+# --------------------------------------------------------------------------- links
+
+[[links]]
+field   = "visit"
+target  = "visit"
+card    = "0..N"
+kind    = "one-way"
+meaning = "The appointment this was ordered at or discussed in. Empty for a routine screen booked by nobody."
+
+[[links]]
+field   = "related"
+target  = "lab"
+card    = "0..N"
+kind    = "lateral"
+meaning = "The previous result on the same panel, where following the chain matters more than sorting by date."
+
+# --------------------------------------------------------------------------- body
+
+[body]
+required_h2 = ["## Results",
+               "## Out of range",
+               "## What was said about it"]
+optional_h2 = ["## Context"]
+sources_h3  = "### Sources"
+cite_style  = "inline-wikilink"
+
+# `## Out of range` carries Unknown when nothing was flagged, never an empty heading and never
+# a cheerful "all normal" that was not actually checked against the sheet.
+
+# --------------------------------------------------------------------------- view
+
+[view]
+columns = ["file.name", "date", "panel", "provider", "ordered-by", "fasting", "status", "tags"]
+
+[[view.sort]]
+property  = "date"
+direction = "DESC"
+
+[[view.sort]]
+property  = "panel"
+direction = "ASC"
+
+# --------------------------------------------------------------------------- skill
+
+[card-skill]
+modes    = ["single"]
+shared   = ["status-protocol", "card-concision"]
+rubrics  = []
+triggers = ["file a lab result", "record bloodwork"]
+induces  = "false-precision"

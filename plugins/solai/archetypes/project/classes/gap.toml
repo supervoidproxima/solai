@@ -1,0 +1,157 @@
+schema = 1
+
+# A gap is the diagnostic atom of an analysis vault: the difference between what is and
+# what should be, stated once, cited, and carried forward into a resolution. Everything
+# below is projected into the data dictionary, CLAUDE.md, the /gap skill, the Base view
+# and the validator. Nothing restates it by hand.
+
+class     = "gap"
+prefix    = "GAP"
+folder    = "registry/gaps"
+skill     = "gap"
+title     = "Gap"
+purpose   = "A finding framed as the difference between current and desired state, in the IIA sense: an observation, not an accusation."
+minted_by = "skill:gap"
+archive_folder = "registry/gaps/archive"
+
+[status]
+lifecycle = ["on-review", "open"]
+terminal  = ["archived"]
+default   = "on-review"
+
+[status.notes]
+"on-review" = "asserted by the normative source alone, or with no source at all. Not yet checked against observed practice, so it may not carry a deliverable."
+"open"      = "confirmed against evidence: an interview, a case, a survey, a document."
+"archived"  = "absorbed by another gap, refuted, or taken out of perimeter by decision. Drops out of every recount and every generated view."
+
+[status.rules]
+terminal_callout        = true   # a terminal card opens with a callout naming reason and date
+terminal_relaxes_schema = true   # a terminal card is asked only for id, type, date, status
+
+# --------------------------------------------------------------------------- fields
+
+[[fields]]
+name     = "text"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "One tight phrase: what is absent, contradicted or observed. No hedging, no counts of things not counted."
+
+[[fields]]
+name     = "kind"
+type     = "enum"
+card     = "1"
+required = true
+values   = ["regulatory", "operational", "technology", "data", "conflict"]
+meaning  = "The nature of the gap. It determines who can close it, which is why it is required rather than inferred."
+[fields.value_notes]
+regulatory  = "The rule is missing, or exists and is ambiguous. Addressee: whoever writes the rules."
+operational = "The rule exists; the procedure, route, role or deadline that would execute it does not. Addressee: the process owner."
+technology  = "No tool, system, integration or template. Addressee: IT."
+data        = "No data, measurement, field or record. Addressee: the data owner."
+conflict    = "Two rules contradict, or an interest does. Addressee: the rule author plus an arbiter."
+
+[[fields]]
+name       = "severity"
+type       = "enum"
+card       = "1"
+required   = true
+values     = ["high", "medium", "low"]
+no_default = true    # deliberately no default: naming the trigger IS the gate
+meaning    = "Assessed by consequence, never by how annoying it is. high = direct financial or legal exposure, or the process stops. medium = systemic inefficiency with no immediate exposure. low = local friction or hygiene."
+
+[[fields]]
+name    = "stream"
+type    = "list<wl>"
+card    = "0..N"
+source  = "partition"     # values injected from the setup answer, not hardcoded here
+meaning = "Which value streams the gap touches. Empty means it is not localisable to one."
+
+[[fields]]
+name    = "demand"
+type    = "enum"
+card    = "0..1"
+values  = ["low", "medium", "high"]
+derived_by = "_system/scripts/derive_demand.py"
+meaning = "Banded count of distinct voices asking for this to be closed. Derived, never typed. Orthogonal to severity: severity is consequence, demand is appetite."
+
+[[fields]]
+name       = "demand-voices"
+type       = "int"
+card       = "0..1"
+derived_by = "_system/scripts/derive_demand.py"
+meaning    = "The count behind the band, so the band can be audited."
+
+# --------------------------------------------------------------------------- links
+
+[[links]]
+field      = "resolution"
+target     = "resolution"
+card       = "0..N"
+kind       = "bidirectional"
+reciprocal = "gap"
+meaning    = "The resolutions that close this gap. Reciprocal, so neither side can drift."
+
+[[links]]
+field   = "proposal"
+target  = "proposal"
+card    = "0..N"
+kind    = "one-way"
+meaning = "Proposals from the field that bear on this gap."
+
+[[links]]
+field   = "pain"
+target  = "pain"
+card    = "0..N"
+kind    = "one-way"
+meaning = "The pains this gap shows up as. Evidence, not restatement."
+
+[[links]]
+field   = "question"
+target  = "question"
+card    = "0..N"
+kind    = "one-way"
+
+[[links]]
+field   = "related"
+target  = "gap"
+card    = "0..N"
+kind    = "lateral"
+meaning = "See-also between gaps: a dependency or a near neighbour. Never a substitute for a resolution link."
+
+# --------------------------------------------------------------------------- body
+
+[body]
+required_h2 = ["## What the gap is",
+               "## Where it should be fixed",
+               "## Risk if it is not",
+               "## What is actually observed"]
+optional_h2 = ["## Enumeration", "## Positions of the parties"]
+sources_h3  = "### Sources"
+cite_style  = "footnotes"
+
+# A required section with nothing to say carries the single word Unknown. The heading is
+# never dropped: an absent heading reads as "not applicable", and absence is a value (D13).
+
+# --------------------------------------------------------------------------- view
+
+[view]
+columns = ["file.name", "text", "status", "severity", "kind", "demand", "stream",
+           "proposal", "pain", "resolution", "tags"]
+
+[[view.sort]]
+property  = "severity"
+direction = "ASC"
+
+[[view.sort]]
+property  = "file.name"
+direction = "ASC"
+
+# --------------------------------------------------------------------------- skill
+
+[card-skill]
+modes    = ["single", "sweep"]
+shared   = ["status-protocol", "card-concision", "block-id-protocol"]
+rubrics  = ["kind", "severity"]
+triggers = ["log a gap", "record a finding"]
+induces  = "false-completeness"

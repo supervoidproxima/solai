@@ -1,0 +1,33 @@
+schema = 1
+
+# The one workflow here with a genuine barrier, and the reason is deduplication: the second
+# phase has to see every extracted record at once, because whether a record is a duplicate is a
+# fact about the whole batch and not about any one document.
+
+workflow = "intake"
+title    = "Intake"
+goal     = """Turn a batch of sources into candidate cards of one declared class, then settle \
+which of them are genuinely distinct before anything is written."""
+input    = "A folder or list of sources, and the one card class to extract."
+output   = "Candidate records ready for the class skill to mint, plus the rejected candidates and the reason each was dropped."
+run_when = "Sources have arrived faster than anyone can read them."
+
+[[phases]]
+n      = 1
+title  = "Extract"
+agent  = "extractor"
+shape  = "pipeline"
+over   = "each source in the batch"
+carry  = "records"
+detail = "One extractor per source, independently. A source that yields nothing yields an empty record list and a populated rejection list, which is a result rather than a failure."
+
+[[phases]]
+n               = 2
+title           = "Settle"
+agent           = "refuter"
+shape           = "barrier"
+over            = "the collected records from every source at once"
+barrier_because = """Whether two records are the same card is a fact about the whole batch, not \
+about either document. Running this per source would mint the same card twice from two sources \
+that mention it, and the second mint is not detectable from inside the first."""
+detail          = "Attack each record's distinctness against every other record in the batch. The output is a merge list, not a verdict per document."

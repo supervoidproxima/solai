@@ -1,0 +1,225 @@
+schema    = 1
+archetype = "personal"
+title     = "Personal"
+summary   = "Records of a life that has to be looked up later: health, money, days. Few classes, each one a record rather than an argument, and a change log so the rules themselves have a history."
+
+# Top-level keys must precede the first table header. In TOML a bare key after `[ids]`
+# belongs to `ids`, and the failure is silent: the archetype loads with zero classes.
+classes = ["lab", "prescription", "visit", "account", "liability"]
+lookups = []
+
+# Two. Records arrive as documents and have to be turned into cards
+# (extractor), and what leaves goes to a clinician (editor). There is no
+# claim here to refute and no market to scout.
+agents = ["extractor", "editor"]
+
+# None. Two agents is not a multi-stage job, and `intake` would need a
+# refuter this archetype has no work for. Selection refuses that at load.
+workflows = []
+
+# The five classes are not a guess. They are what the read-only probe found already built by
+# hand in the Fangorn vault (LAB 21, RX 3, VIS 5, ACC 14, LIA 19), which is the strongest
+# evidence available for what a personal vault actually accumulates. Journal notes, reading
+# notes and attachments stay unclassed on purpose: a dated note is not a card, and giving it
+# an ID buys nothing you cannot get from frontmatter.
+
+[interview]
+asks = ["mode", "root", "name", "remit", "output_language",
+        "content_languages", "filename_language",
+        "governance_tier", "classes", "first_artefact"]
+
+[interview.defaults]
+# The opening line of the place, offered rather than imposed: the page fills it in
+# and stops the moment anyone edits it. A blank first field is a stall, and a
+# sentence nobody wrote is at least the sentence this type is for.
+first_artefact  = "One decision taken on what this vault says, rather than on a hunch."
+remit           = "What is true about my money and my health right now, kept current enough to act on."
+governance_tier = "light"
+changes_folder  = "changes"
+
+# No `[interview.partition]`. A personal vault has no value streams to cut across, and a
+# partition question with no honest answer trains you to invent one.
+
+[ids]
+card          = "^[A-Z]{2,3}-[0-9]{3}$"
+change        = "^CHG-[0-9]{3}$"
+date          = "YYYY-MM-DD"
+property-case = "kebab"
+file-case     = "kebab"
+block-id      = "^\\^[0-9a-f]{6}$"
+
+# `[A-Z]{2,3}` rather than the project archetype's strict three: RX is the name this record
+# has everywhere else in medicine, and renaming it to PRX to satisfy a regex would make the
+# vault harder to read in order to make the validator quieter.
+
+
+# --------------------------------------------------------------------------- folders
+
+[[folders]]
+path = "journal"
+purpose = "one note per day. Dated, unclassed, appended to and never rewritten"
+[[folders]]
+path = "wellbeing"
+purpose = "health records. The class folders sit under here"
+[[folders]]
+path = "finance"
+purpose = "money. Balances come from statements, never from memory"
+[[folders]]
+path = "notes"
+purpose = "flat. Filtered by frontmatter, not by folder"
+[[folders]]
+path = "files"
+purpose = "attachments and scans, named for what they are"
+[[folders]]
+path = "changes"
+purpose = "change records, immutable once written"
+[[folders]]
+path = "_inbox"
+purpose = "unprocessed capture. Cleared, not archived"
+[[folders]]
+path = "_system"
+purpose = "vault infrastructure"
+[[folders]]
+path = "_system/scripts"
+purpose = "generators and checks, with a run-order contract in the readme"
+[[folders]]
+path = "_system/handoff"
+purpose = "session handoff notes, written at half context"
+[[folders]]
+path = "_system/runs"
+purpose = "dated audit output. Ephemeral and regenerable"
+[[folders]]
+path = "_system/os"
+purpose = "engine state. Out of scope of the vault's own governance"
+
+# --------------------------------------------------------------------------- artefacts
+
+[[artefacts]]
+id      = "claude-md"
+path    = "CLAUDE.md"
+mode    = "merged"
+emitter = "claudemd"
+regions = ["header", "purpose", "language", "constraints", "id-standard", "card-index",
+           "loop", "structure", "frontmatter", "naming", "citation", "handoff",
+           "change-discipline", "honesty"]
+generated = ["language", "id-standard", "card-index", "loop", "structure",
+             "frontmatter", "naming", "citation"]
+
+[[artefacts]]
+id      = "data-dictionary"
+path    = "_system/data-dictionary.md"
+mode    = "merged"
+emitter = "classes"
+regions = ["status-matrix", "enums", "derived", "schemas", "link-rules"]
+generated = ["status-matrix", "enums", "derived", "schemas", "link-rules"]
+
+# The tier table puts `data-dictionary.md` at standard and above, and this archetype defaults
+# to light. Both are right: light describes a vault with no data model yet, and the moment one
+# lab result exists there is a schema, so it is projected rather than retyped. The alternative
+# was to withhold the dictionary until promotion and let five declared classes go unprojected,
+# which is the drift the package exists to stop.
+
+[[artefacts]]
+id      = "vocabulary"
+path    = "_system/vocabulary.md"
+mode    = "merged"
+emitter = "vocabulary"
+regions = ["keys"]
+generated = ["keys"]
+
+[[artefacts]]
+id      = "start-here"
+path    = "START-HERE.md"
+mode    = "generated"
+emitter = "starthere"
+
+[[artefacts]]
+id      = "bond"
+path    = "_system/os/vault.md"
+mode    = "generated"
+emitter = "bond"
+
+[[artefacts]]
+id      = "state"
+path    = "_system/state.md"
+mode    = "seeded"
+fragment = "system/state.md"
+
+[[artefacts]]
+id      = "registry-base"
+path    = "registry.base"
+mode    = "generated"
+emitter = "bases"
+
+[[artefacts]]
+id      = "dashboard"
+path    = "dashboard.html"
+mode    = "generated"
+emitter = "dashboard"
+
+[[artefacts]]
+id      = "card-skills"
+path    = ".claude/skills/{skill}/SKILL.md"
+mode    = "merged"
+emitter = "cardskill"
+foreach = "classes"
+regions = ["frontmatter", "step-id", "step-fields", "step-body", "step-write"]
+generated = ["frontmatter", "step-id", "step-fields", "step-body", "step-write"]
+
+[[artefacts]]
+id    = "shared"
+path  = ".claude/skills/_shared/"
+mode  = "copied"
+from  = "shared/"
+files = ["status-protocol.md", "card-concision.md", "block-id-protocol.md"]
+
+[[artefacts]]
+id    = "scripts"
+path  = "_system/scripts/"
+mode  = "copied"
+from  = "runtime/"
+files = ["check_links.py", "stamp_check.py", "validate_cards.py", "gen_dashboard.py", "check_agents.py"]
+
+[[artefacts]]
+id       = "chg-001"
+path     = "changes/CHG-001.md"
+mode     = "seeded"
+fragment = "chg/chg-001.md"
+bootstrap = true
+
+[[artefacts]]
+id      = "agents"
+path    = ".claude/agents/{agent}.md"
+mode    = "merged"
+emitter = "agent"
+foreach = "agents"
+regions = ["frontmatter", "job", "returns", "evals"]
+generated = ["frontmatter", "job", "returns", "evals"]
+
+# --------------------------------------------------------------------------- loop
+
+[[loop]]
+n = 1
+name = "a document arrives: a result, a statement, a letter"
+skill = "-"
+out = "files/"
+[[loop]]
+n = 2
+name = "file it as the record it is"
+skill = "/lab /prescription /visit /account /liability"
+out = "wellbeing/ finance/"
+[[loop]]
+n = 3
+name = "write the day down"
+skill = "-"
+out = "journal/"
+[[loop]]
+n = 4
+name = "check links, statuses and stamps"
+skill = "/solai check"
+out = "_system/runs/"
+[[loop]]
+n = 5
+name = "record what changed and why"
+skill = "/solai change"
+out = "changes/"

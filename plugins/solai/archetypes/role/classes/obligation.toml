@@ -1,0 +1,145 @@
+schema = 1
+
+# An obligation is one thing the role owes, written so that it can be checked against the
+# document that imposes it. The source is required and it is the whole point: a duty nobody can
+# trace to a clause, a plan line or a named instruction is something you assumed about the job,
+# and half of what goes wrong in a new role is an assumed duty nobody ever asked for.
+
+class     = "obligation"
+prefix    = "OBL"
+folder    = "obligations"
+skill     = "obligation"
+title     = "Obligation"
+purpose   = "One thing the role owes, traced to the document or the instruction that imposes it, with what would count as discharging it."
+minted_by = "skill:obligation"
+
+[status]
+lifecycle = ["asserted", "confirmed", "at-risk"]
+terminal  = ["discharged", "transferred", "retired"]
+default   = "asserted"
+
+[status.notes]
+"asserted"    = "read out of a document by you, and nobody has agreed with the reading yet. The honest state on week one, and a folder that is entirely asserted is a draft of the job rather than the job."
+"confirmed"   = "the person who can say otherwise has agreed this is owed. Names them, or it is still asserted."
+"at-risk"     = "due, or recurring, and nothing has left against it inside its own period. Not a warning about the future: a statement about a window that has already passed."
+"discharged"  = "satisfied, and a deliverable proves it. A one-off ends here; a standing obligation does not end at all, which is why the cadence field exists."
+"transferred" = "someone else holds it now, named. Different from retired: the duty still exists, it is simply no longer yours, and confusing the two is how a handover loses half its content."
+"retired"     = "no longer owed, because the document or the role changed. Names what changed."
+
+[status.rules]
+terminal_callout        = true
+terminal_relaxes_schema = false
+
+# Terminal does not relax the schema. A transferred obligation that dropped its source and its
+# discharge test hands the next holder a sentence and no way to check it.
+
+# --------------------------------------------------------------------------- fields
+
+[[fields]]
+name     = "statement"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "What is owed, in one sentence, starting with the verb. `Prepare the quarterly report for the board` is an obligation. `Reporting` is a topic."
+
+[[fields]]
+name     = "source"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "Where it comes from: the clause, the plan line, the order, or the person and date of the instruction. An obligation with no source is a rumour about your own job."
+
+[[fields]]
+name       = "kind"
+type       = "enum"
+card       = "1"
+required   = true
+values     = ["standing", "one-off", "conditional"]
+no_default = true
+meaning    = "Standing recurs and never completes; one-off completes once; conditional sleeps until its trigger fires. No default: the three have different endings and guessing picks one."
+
+[[fields]]
+name    = "cadence"
+type    = "enum"
+card    = "0..1"
+values  = ["daily", "weekly", "monthly", "quarterly", "annual", "on-event"]
+meaning = "How often a standing obligation comes round. It is what makes `at-risk` computable rather than a feeling. Empty on a one-off."
+
+[[fields]]
+name    = "due"
+type    = "date"
+card    = "0..1"
+meaning = "When a one-off or a conditional obligation is owed by. Empty on a standing one, which has a cadence instead."
+
+[[fields]]
+name    = "owed-to"
+type    = "scalar"
+card    = "0..1"
+meaning = "Who is entitled to it. Empty means the document names nobody, which is worth seeing: an obligation owed to no one is rarely enforced and often invented."
+
+[[fields]]
+name    = "area"
+type    = "list<wl>"
+card    = "0..N"
+source  = "partition"
+meaning = "Which areas of the role this falls under. Empty means it spans all of them."
+
+[[fields]]
+name    = "last-discharged"
+type    = "date"
+card    = "0..1"
+meaning = "When something last left against it. Empty on a standing obligation is exactly what at-risk means, so leaving it empty says something rather than nothing."
+
+# --------------------------------------------------------------------------- links
+
+[[links]]
+field      = "deliverable"
+target     = "deliverable"
+card       = "0..N"
+kind       = "bidirectional"
+reciprocal = "obligation"
+meaning    = "What has left against this. Reciprocal, because both directions are read constantly: this way to find the silent duties, the other way to check that a deliverable was owed by anything at all."
+
+[[links]]
+field   = "related"
+target  = "obligation"
+card    = "0..N"
+kind    = "lateral"
+meaning = "An obligation this one depends on, or one it overlaps with. Two cards covering one clause belong here rather than in prose, where nothing compares them."
+
+# --------------------------------------------------------------------------- body
+
+[body]
+required_h2 = ["## What is owed",
+               "## Where it comes from",
+               "## What would discharge it",
+               "## What has left against it"]
+optional_h2 = ["## Why it was retired or transferred"]
+sources_h3  = "### Sources"
+cite_style  = "footnotes"
+
+# `## What would discharge it` is written before the work, like a claim's test. Written
+# afterwards it describes whatever you happened to produce, and then every obligation is met.
+
+# --------------------------------------------------------------------------- view
+
+[view]
+columns = ["file.name", "statement", "status", "kind", "cadence", "due", "owed-to",
+           "area", "deliverable", "last-discharged", "tags"]
+
+[[view.sort]]
+property  = "status"
+direction = "ASC"
+
+[[view.sort]]
+property  = "due"
+direction = "ASC"
+
+# --------------------------------------------------------------------------- skill
+
+[card-skill]
+modes    = ["single", "sweep"]
+shared   = ["status-protocol", "card-concision", "block-id-protocol"]
+rubrics  = ["kind", "status"]
+triggers = ["record what the role owes", "read a job description down into obligations"]
+induces  = "duty-inflation"

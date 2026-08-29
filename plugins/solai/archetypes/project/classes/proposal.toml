@@ -1,0 +1,75 @@
+schema = 1
+
+# A proposal is what somebody in the field says should be done. It is a demand-side sibling
+# of a pain, not a resolution. Mutating one into the other destroys the provenance that
+# makes an analysis credible: "the user asked for X, the analyst recommends Y".
+
+class     = "proposal"
+prefix    = "PRP"
+folder    = "registry/proposals"
+skill     = "proposal"
+title     = "Proposal"
+purpose   = "A change proposed by a process owner, a system owner, or derived by the analyst from what they said."
+minted_by = "skill:proposal"
+
+[status]
+lifecycle = ["on-review", "open"]
+terminal  = ["archived"]
+default   = "on-review"
+
+[status.rules]
+terminal_callout = true
+
+[[fields]]
+name     = "title"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The proposed change in one phrase."
+
+[[fields]]
+name    = "stream"
+type    = "list<wl>"
+card    = "0..N"
+source  = "partition"
+
+[[links]]
+field   = "pain"
+target  = "pain"
+card    = "0..N"
+kind    = "one-way"
+meaning = "The pains it would relieve."
+
+[[links]]
+field   = "gap"
+target  = "gap"
+card    = "0..N"
+kind    = "one-way"
+meaning = "The gaps it bears on."
+
+[[links]]
+field   = "related"
+target  = "proposal"
+card    = "0..N"
+kind    = "lateral"
+
+[body]
+required_h2 = ["## What is proposed",
+               "## What it would fix",
+               "## Expected effect",
+               "## Who proposed it"]
+optional_h2 = ["## Analyst's assessment"]
+sources_h3  = "### Sources"
+cite_style  = "footnotes"
+
+[view]
+columns = ["file.name", "title", "status", "stream", "pain", "gap", "tags"]
+
+[[view.sort]]
+property  = "file.name"
+direction = "ASC"
+
+[card-skill]
+modes   = ["single", "sweep"]
+shared  = ["status-protocol", "card-concision", "block-id-protocol"]
+induces = "none"

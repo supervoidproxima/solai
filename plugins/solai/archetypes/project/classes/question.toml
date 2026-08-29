@@ -1,0 +1,83 @@
+schema = 1
+
+# A question is an open ask addressed to a person, answerable in words. It is not a request
+# (that asks for an artefact) and not a hypothesis (that asserts something testable).
+
+class     = "question"
+prefix    = "QST"
+folder    = "registry/questions"
+skill     = "question"
+title     = "Question"
+purpose   = "An open analytical question addressed to a named person or role."
+minted_by = "skill:question"
+
+[status]
+lifecycle = ["open", "asked", "answered"]
+terminal  = ["dropped", "archived"]
+default   = "open"
+
+[status.notes]
+"asked"    = "put to the addressee; no answer yet."
+"answered" = "answered by the addressee. A norm found in a document is not an answer: it is context."
+"dropped"  = "no longer worth asking."
+
+[status.rules]
+terminal_callout = true
+
+[[fields]]
+name     = "question"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The question as it would be asked out loud."
+
+[[fields]]
+name     = "kind"
+type     = "enum"
+card     = "1"
+required = true
+values   = ["factual", "hypothesis", "open", "clarification", "verification"]
+meaning  = "What kind of answer would settle it. Shapes how it is asked."
+
+[[fields]]
+name    = "addressee"
+type    = "scalar"
+card    = "0..1"
+meaning = "Who can answer. A question with no addressee is a note to self."
+
+[[fields]]
+name    = "stream"
+type    = "list<wl>"
+card    = "0..N"
+source  = "partition"
+
+[[links]]
+field   = "pain"
+target  = "pain"
+card    = "0..N"
+kind    = "one-way"
+
+[[links]]
+field   = "proposal"
+target  = "proposal"
+card    = "0..N"
+kind    = "one-way"
+
+[body]
+required_h2 = ["## Why we are asking", "## Where the question came from", "## Answers"]
+optional_h2 = ["## What the documents say", "## Consolidated answer"]
+sources_h3  = "### Sources"
+cite_style  = "footnotes"
+
+[view]
+columns = ["file.name", "question", "status", "kind", "addressee", "stream", "tags"]
+
+[[view.sort]]
+property  = "status"
+direction = "ASC"
+
+[card-skill]
+modes   = ["single", "sweep"]
+shared  = ["status-protocol", "card-concision", "block-id-protocol"]
+rubrics = ["kind"]
+induces = "none"

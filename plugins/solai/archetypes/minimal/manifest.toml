@@ -1,0 +1,90 @@
+schema    = 1
+archetype = "minimal"
+title     = "Minimal"
+summary   = "A CLAUDE.md, a change log, an inbox. Nothing that has to be maintained."
+
+classes = []
+lookups = []
+
+# None. An archetype that promises nothing to maintain cannot ship four agents
+# and still mean it. A place that grows into needing one adopts it later.
+agents = []
+
+# None, like the agents.
+workflows = []
+
+[interview]
+asks = ["mode", "root", "name", "remit", "output_language",
+        "content_languages", "filename_language", "first_artefact"]
+
+[interview.defaults]
+# The opening line of the place, offered rather than imposed: the page fills it in
+# and stops the moment anyone edits it. A blank first field is a stall, and a
+# sentence nobody wrote is at least the sentence this type is for.
+first_artefact  = "One note this notebook is for, written and re-read."
+remit           = "A notebook with rules it can check."
+governance_tier = "light"
+changes_folder  = "changes"
+
+[ids]
+change        = "^CHG-[0-9]{3}$"
+date          = "YYYY-MM-DD"
+property-case = "kebab"
+file-case     = "kebab"
+
+[[folders]]
+path = "_inbox"
+purpose = "unprocessed capture. Cleared, not archived"
+[[folders]]
+path = "notes"
+purpose = "flat. Filtered by frontmatter, not by folder"
+[[folders]]
+path = "files"
+purpose = "attachments"
+[[folders]]
+path = "changes"
+purpose = "change records, immutable once written"
+[[folders]]
+path = "_system/os"
+purpose = "engine state. Out of scope of the vault's own conventions"
+
+[[artefacts]]
+id      = "claude-md"
+path    = "CLAUDE.md"
+mode    = "merged"
+emitter = "claudemd"
+regions = ["header", "purpose", "language", "structure", "frontmatter", "naming",
+           "handoff", "change-discipline", "honesty"]
+generated = ["language", "structure", "frontmatter", "naming"]
+
+[[artefacts]]
+id      = "start-here"
+path    = "START-HERE.md"
+mode    = "generated"
+emitter = "starthere"
+
+[[artefacts]]
+id      = "bond"
+path    = "_system/os/vault.md"
+mode    = "generated"
+emitter = "bond"
+
+[[artefacts]]
+id      = "dashboard"
+path    = "dashboard.html"
+mode    = "generated"
+emitter = "dashboard"
+
+[[artefacts]]
+id    = "scripts"
+path  = "_system/scripts/"
+mode  = "copied"
+from  = "runtime/"
+files = ["check_links.py", "gen_dashboard.py"]
+
+[[artefacts]]
+id       = "chg-001"
+path     = "changes/CHG-001.md"
+mode     = "seeded"
+fragment = "chg/chg-001.md"
+bootstrap = true

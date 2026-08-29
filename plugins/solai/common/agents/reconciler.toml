@@ -1,0 +1,68 @@
+schema = 1
+
+agent = "reconciler"
+title = "Reconciler"
+job   = "Given one received artefact and the request it was meant to answer, judge whether it answers the QUESTION the request was asking, not whether its title matches the request's title. Report what it does answer, what it leaves open, and what a second request would have to ask for."
+sent_when = "A document has arrived against an outstanding request and somebody has to decide whether the request is closed."
+model   = "inherit"
+tools   = ["Read", "Grep", "Glob"]
+writes  = false
+induces = "title-matching"
+refusals = ["Judging by the title. A request's title is written before the answer exists and is often wrong about what was being asked.", "Closing a request the artefact only partly answers. Partly is a verdict, not a rounding error."]
+
+[returns]
+kind    = "verdict"
+meaning = "Given one received artefact and the request it was meant to answer, judge whether it answers the QUESTION the request was asking, not whether its title matches the request's title. Report what it does answer, what it leaves open, and what a second request would have to ask for."
+
+[[returns.fields]]
+name     = "verdict"
+type     = "enum"
+required = true
+values   = ["answers", "partly-answers", "answers-something-else", "absent"]
+meaning  = "Whether the artefact answers the question the request was asking. answers-something-else is the common case and the one a title match hides."
+
+[[returns.fields]]
+name     = "question-as-read"
+type     = "scalar"
+required = true
+meaning  = "The question the request was actually asking, restated before the artefact is judged against it. If this is wrong the rest of the answer is about a different request."
+
+[[returns.fields]]
+name     = "answered"
+type     = "list<obj>"
+required = true
+of       = ["part", "evidence"]
+meaning  = "Each part of the question the artefact does answer, with the passage that answers it."
+
+[[returns.fields]]
+name     = "left-open"
+type     = "list<obj>"
+required = true
+of       = ["part", "why"]
+meaning  = "Each part it does not answer. Empty only when the artefact closes the request completely."
+
+[[returns.fields]]
+name     = "next-request"
+type     = "scalar"
+required = false
+meaning  = "What a follow-up would have to ask for, in the requester's own terms. Empty when nothing is left open."
+
+[[evals]]
+id         = "RC-1"
+asserts    = "The artefact is judged against the question, not the title."
+fails_when = "The verdict is answers while left-open is non-empty, or the reasoning cites the request's title rather than what it was asking for."
+
+[[evals]]
+id         = "RC-2"
+asserts    = "The question is restated before the judgement."
+fails_when = "question-as-read is empty, or narrows the request to the part the artefact happens to cover."
+
+[[evals]]
+id         = "RC-3"
+asserts    = "A partial answer is reported as partial."
+fails_when = "Across a run it never returns partly-answers or answers-something-else, which would mean it is matching titles after all."
+
+[[evals]]
+id         = "RC-4"
+asserts    = "Anything left open names its follow-up."
+fails_when = "left-open is non-empty and next-request is empty."

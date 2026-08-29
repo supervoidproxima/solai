@@ -1,0 +1,121 @@
+schema = 1
+
+# A resolution is what the analyst recommends, as distinct from what a stakeholder asked
+# for (that is a proposal) and from what gets delivered (that is a project). Keeping the
+# three apart preserves provenance: "they asked for X, I recommend Y, we shipped Z".
+
+class     = "resolution"
+prefix    = "RES"
+folder    = "registry/resolutions"
+skill     = "resolution"
+title     = "Resolution"
+purpose   = "An analyst recommendation that closes one or more gaps. Supply side: it adapts, accepts or rejects proposals rather than restating them."
+minted_by = "skill:resolution"
+
+[status]
+lifecycle = ["on-review", "recommended", "scheduled", "implemented"]
+terminal  = ["rejected", "accepted", "archived"]
+default   = "on-review"
+
+[status.notes]
+"rejected" = "the recommendation was turned down on its merits."
+"accepted" = "the gap is knowingly accepted: the residue is named and an authority signed for it. Not the same as rejecting the recommendation."
+"archived" = "lost its basis and left the perimeter. Does not enter deliverables."
+
+[status.rules]
+terminal_callout        = true
+terminal_relaxes_schema = true
+
+[[fields]]
+name     = "title"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "What the recommendation is, in one phrase."
+
+[[fields]]
+name     = "effort"
+type     = "enum"
+card     = "1"
+required = true
+values   = ["low", "medium", "high"]
+meaning  = "Rough feasibility. Paired with the severity of the gaps it closes, this gives the impact-effort quadrant. Severity alone does not prioritise anything."
+
+[[fields]]
+name    = "cost"
+type    = "enum"
+card    = "0..1"
+values  = ["low", "medium", "high"]
+meaning = "External spend only. Internal time is effort, not cost."
+
+[[fields]]
+name    = "owner"
+type    = "scalar"
+card    = "0..1"
+meaning = "Role plus organisation. Unknown where it is genuinely undecided."
+
+[[fields]]
+name       = "demand"
+type       = "enum"
+card       = "0..1"
+values     = ["low", "medium", "high"]
+derived_by = "_system/scripts/derive_demand.py"
+meaning    = "Banded count of distinct voices behind this. Derived."
+
+[[fields]]
+name       = "demand-voices"
+type       = "int"
+card       = "0..1"
+derived_by = "_system/scripts/derive_demand.py"
+
+[[links]]
+field      = "gap"
+target     = "gap"
+card       = "1..N"
+kind       = "bidirectional"
+reciprocal = "resolution"
+meaning    = "The gaps this closes. Required: a resolution with no gap is an opinion."
+
+[[links]]
+field   = "proposal"
+target  = "proposal"
+card    = "0..N"
+kind    = "one-way"
+meaning = "Proposals taken as input, whether adopted, adapted or declined."
+
+[[links]]
+field   = "pain"
+target  = "pain"
+card    = "0..N"
+kind    = "one-way"
+
+[[links]]
+field   = "depends-on"
+target  = "resolution"
+card    = "0..N"
+kind    = "lateral"
+meaning = "Strict prerequisite. Directed, and a cycle is a description error."
+
+[body]
+required_h2 = ["## What the resolution is",
+               "## Which gaps it closes",
+               "## How it treats the proposals",
+               "## Effect and reasoning",
+               "## Definition of done and residue",
+               "## Owner and delivery"]
+optional_h2 = ["## Options considered"]
+sources_h3  = "### Sources"
+cite_style  = "footnotes"
+
+[view]
+columns = ["file.name", "title", "status", "effort", "demand", "owner", "gap", "tags"]
+
+[[view.sort]]
+property  = "status"
+direction = "ASC"
+
+[card-skill]
+modes   = ["single"]
+shared  = ["status-protocol", "card-concision"]
+rubrics = ["effort"]
+induces = "authoring-instead-of-shipping"

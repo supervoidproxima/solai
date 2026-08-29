@@ -1,0 +1,123 @@
+schema = 1
+
+# A visit is the event the other two health classes hang off. It is worth a card of its own
+# because what was said in the room is not recoverable from a result sheet or a pharmacy
+# label, and it is the part that is forgotten first.
+
+class     = "visit"
+prefix    = "VIS"
+folder    = "wellbeing/visits"
+skill     = "visit"
+title     = "Clinical visit"
+purpose   = "One appointment: who was seen, what was asked, what they said, and what it produced."
+minted_by = "skill:visit"
+
+[status]
+lifecycle = ["recorded"]
+terminal  = ["superseded"]
+default   = "recorded"
+
+[status.notes]
+"recorded"   = "the appointment happened and the card holds what was said."
+"superseded" = "a later visit overturned this one's conclusion. Kept: a reversed opinion is a fact about the advice, not an error to delete."
+
+[status.rules]
+terminal_callout        = true
+terminal_relaxes_schema = true
+
+# --------------------------------------------------------------------------- fields
+
+[[fields]]
+name     = "provider"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The clinic or hospital."
+
+[[fields]]
+name     = "clinician"
+type     = "scalar"
+card     = "0..1"
+meaning  = "Who was actually seen, with their speciality. Empty where the appointment was with a department rather than a person."
+
+[[fields]]
+name     = "reason"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "Why the appointment was made, stated before the visit rather than after. The gap between the reason for going and the outcome is often the useful part."
+
+[[fields]]
+name    = "kind"
+type    = "enum"
+card    = "0..1"
+values  = ["consultation", "follow-up", "screening", "procedure", "emergency"]
+meaning = "What sort of appointment it was, which is what determines whether a follow-up is expected."
+
+[[fields]]
+name     = "outcome"
+type     = "scalar"
+card     = "0..1"
+meaning  = "One phrase: the conclusion reached in the room. Empty when none was, which happens and is worth being able to see."
+
+[[fields]]
+name    = "follow-up"
+type    = "date"
+card    = "0..1"
+meaning = "The date a return was advised for. A follow-up in the past with no visit against it is the one thing this class is best at surfacing."
+
+# --------------------------------------------------------------------------- links
+
+[[links]]
+field   = "lab"
+target  = "lab"
+card    = "0..N"
+kind    = "one-way"
+meaning = "Results ordered at or reviewed in this appointment."
+
+[[links]]
+field   = "prescription"
+target  = "prescription"
+card    = "0..N"
+kind    = "one-way"
+meaning = "Courses written at this appointment."
+
+[[links]]
+field   = "related"
+target  = "visit"
+card    = "0..N"
+kind    = "lateral"
+meaning = "The appointment this one follows on from."
+
+# --------------------------------------------------------------------------- body
+
+[body]
+required_h2 = ["## Why I went",
+               "## What was said",
+               "## What it produced",
+               "## What is still open"]
+optional_h2 = ["## Questions I did not ask"]
+sources_h3  = "### Sources"
+cite_style  = "inline-wikilink"
+
+# `## What was said` is the clinician's words, marked as theirs. Your reading of them belongs
+# under `## What it produced`, so that the two never blur on a re-read months later.
+
+# --------------------------------------------------------------------------- view
+
+[view]
+columns = ["file.name", "date", "provider", "clinician", "kind", "reason", "outcome",
+           "follow-up", "status", "tags"]
+
+[[view.sort]]
+property  = "date"
+direction = "DESC"
+
+# --------------------------------------------------------------------------- skill
+
+[card-skill]
+modes    = ["single"]
+shared   = ["status-protocol", "card-concision"]
+rubrics  = ["kind"]
+triggers = ["record a visit", "log an appointment"]
+induces  = "recall-drift"

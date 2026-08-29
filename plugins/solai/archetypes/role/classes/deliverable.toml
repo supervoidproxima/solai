@@ -1,0 +1,134 @@
+schema = 1
+
+# A deliverable is one thing that leaves the place, and it is the only class here that produces
+# evidence a person outside the role can weigh. It carries the promise as well as the sending,
+# because a promise and the thing promised are one object at two moments: modelled as two cards
+# they drift apart, and the pair nobody compares is the failure D3 names.
+
+class     = "deliverable"
+prefix    = "DLV"
+folder    = "deliverables"
+skill     = "deliverable"
+title     = "Deliverable"
+purpose   = "One thing that leaves the role, to a named recipient, on a date. Opened when it is promised, not when it is finished."
+minted_by = "skill:deliverable"
+
+[status]
+lifecycle = ["promised", "drafting", "sent"]
+terminal  = ["accepted", "dropped", "superseded"]
+default   = "promised"
+
+[status.notes]
+"promised"   = "someone was told it would come. The date in `due` is the promise that was made, not an estimate revised later, and this state going stale is the single most useful thing this folder reports."
+"drafting"   = "work is under way and the draft exists in the place. A card that sits here for a period longer than the promise it carries is the avoidance this package was built to make visible."
+"sent"       = "it left, on `sent-on`, to `to`. The one state that counts on the artefact side of the ratio (D16), and it may not be set without a date."
+"accepted"   = "the recipient used it, signed it, or said yes. External confirmation, and the only kind that is not self-reported."
+"dropped"    = "promised and never sent. Kept, and kept visible: a folder with no dropped cards is not a disciplined folder, it is one that deletes its own failures."
+"superseded" = "a later deliverable replaced it. Names the successor, or the trail ends here."
+
+[status.rules]
+terminal_callout        = true
+terminal_relaxes_schema = false
+
+# --------------------------------------------------------------------------- fields
+
+[[fields]]
+name     = "artefact"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The thing itself, named the way the recipient would name it. `Career recommendation for a Grade 11 cohort` is an artefact. `Work on careers` is a heading."
+
+[[fields]]
+name     = "to"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The named person or body that receives it. Yourself is not a recipient: something that never leaves the place is a note, and filing it here inflates the only honest number the place computes."
+
+[[fields]]
+name       = "form"
+type       = "enum"
+card       = "1"
+required   = true
+values     = ["document", "dataset", "session", "presentation", "decision-request", "message"]
+no_default = true
+meaning    = "What shape it takes when it arrives. A session counts: work delivered face to face is delivered, and leaving it out would make every advisory role look idle."
+
+[[fields]]
+name    = "due"
+type    = "date"
+card    = "0..1"
+meaning = "The date that was promised. Empty means no date was given, which is worth seeing on the card rather than discovering in the conversation where it is asked for."
+
+[[fields]]
+name    = "sent-on"
+type    = "date"
+card    = "0..1"
+meaning = "When it actually left. Empty until it does. This is the field the ratio counts, and it is deliberately not derivable from the status: a status can be set by hand, a date has to be one."
+
+[[fields]]
+name    = "area"
+type    = "list<wl>"
+card    = "0..N"
+source  = "partition"
+meaning = "Which areas of the role it belongs to. Empty means it spans all of them."
+
+# --------------------------------------------------------------------------- links
+
+[[links]]
+field      = "obligation"
+target     = "obligation"
+card       = "0..N"
+kind       = "bidirectional"
+reciprocal = "deliverable"
+meaning    = "What this discharges. Empty is legitimate and it is a finding: work that answers no obligation is either a duty nobody wrote down or work the role was never asked for, and the two need different conversations."
+
+[[links]]
+field   = "related"
+target  = "deliverable"
+card    = "0..N"
+kind    = "lateral"
+meaning = "A predecessor it supersedes, or a sibling it ships alongside."
+
+# --------------------------------------------------------------------------- body
+
+[body]
+required_h2 = ["## What leaves",
+               "## Who receives it and why them",
+               "## What it discharges",
+               "## What came back"]
+optional_h2 = ["## Why it was dropped"]
+sources_h3  = "### Sources"
+cite_style  = "footnotes"
+
+# `## What came back` carries Unknown while the card is unsent, and the heading stays. Dropping
+# it once the thing is sent reads as "nothing came back", which is a different statement and
+# usually the more interesting one.
+
+# --------------------------------------------------------------------------- view
+
+[view]
+columns = ["file.name", "artefact", "status", "to", "form", "due", "sent-on",
+           "obligation", "area", "tags"]
+
+[[view.sort]]
+property  = "status"
+direction = "ASC"
+
+[[view.sort]]
+property  = "due"
+direction = "ASC"
+
+# --------------------------------------------------------------------------- skill
+
+[card-skill]
+modes    = ["single", "sweep"]
+shared   = ["status-protocol", "card-concision", "block-id-protocol"]
+rubrics  = ["form", "status"]
+triggers = ["record something promised", "log what was sent and to whom"]
+induces  = "drafting-instead-of-sending"
+
+# Sweep mode exists for one source in particular: the notes of a meeting where three things were
+# promised out loud. Those are the promises that never reach a folder, and they are the ones
+# the other party remembers.

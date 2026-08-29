@@ -1,0 +1,16 @@
+# Byte-compiled caches are machine-local and never belong in the package.
+__pycache__/
+*.pyc
+
+# The authoring engine's rollback manifest and backups. Local to one machine, like any
+# apply record.
+.author/
+
+# Working notes and conformance reports over real vaults. These name real paths and real
+# projects, so they stay on the machine that produced them.
+handoff/
+private/
+
+# Vaults built while testing. A built vault is an output, not part of the package, and a
+# folder under plugins/ would be read as a plugin.
+plugins/SMP/

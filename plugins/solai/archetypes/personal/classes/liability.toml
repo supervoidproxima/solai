@@ -1,0 +1,134 @@
+schema = 1
+
+# A liability is a commitment with a schedule. It is the mirror of an account and it earns a
+# class of its own for one reason: a debt has an end date, and a vault that cannot answer
+# "when does this stop" is not holding the fact that matters.
+
+class     = "liability"
+prefix    = "LIA"
+folder    = "finance/dimensions/dim-liability"
+skill     = "liability"
+title     = "Liability"
+purpose   = "One debt. What is owed, to whom, on what terms, and until when."
+minted_by = "skill:liability"
+
+[status]
+lifecycle = ["active"]
+terminal  = ["settled", "written-off"]
+default   = "active"
+
+[status.notes]
+"active"      = "still being paid. Counts towards monthly outflow and remaining principal."
+"settled"     = "paid off. Kept, because the schedule it used to occupy explains past months."
+"written-off" = "cancelled, forgiven or otherwise ended without being paid. Distinct from settled: the money did not move."
+
+[status.rules]
+terminal_callout        = true
+terminal_relaxes_schema = true
+
+# --------------------------------------------------------------------------- fields
+
+[[fields]]
+name     = "bank"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The creditor. One spelling, matching the account cards."
+
+[[fields]]
+name     = "principal"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "Amount originally borrowed, with its currency. Not the amount outstanding: that changes monthly and belongs in the body, dated."
+
+[[fields]]
+name     = "currency"
+type     = "enum"
+card     = "1"
+required = true
+values   = ["KZT", "USD", "EUR", "GBP", "AED"]
+meaning  = "ISO code."
+
+[[fields]]
+name     = "monthly"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The contractual monthly payment. The single number every forecast in the vault depends on, which is why it is required rather than derived."
+
+[[fields]]
+name       = "interest-rate"
+type       = "scalar"
+card       = "1"
+required   = true
+meaning    = "As written in the contract, including a literal zero. An interest-free instalment plan is a real product, and leaving the field empty makes it indistinguishable from one that was never checked."
+
+[[fields]]
+name     = "start-date"
+type     = "date"
+card     = "1"
+required = true
+meaning  = "First scheduled payment."
+
+[[fields]]
+name     = "end-date"
+type     = "date"
+card     = "1"
+required = true
+meaning  = "Last scheduled payment. Required: a debt with no end declared is either an error or a revolving facility, and those are different things that should not look alike."
+
+[[fields]]
+name    = "collateral"
+type    = "scalar"
+card    = "0..1"
+meaning = "What secures it, where anything does."
+
+# --------------------------------------------------------------------------- links
+
+[[links]]
+field   = "account"
+target  = "account"
+card    = "0..1"
+kind    = "one-way"
+meaning = "The account it is paid from."
+
+[[links]]
+field   = "related"
+target  = "liability"
+card    = "0..N"
+kind    = "lateral"
+meaning = "A debt this one refinanced or consolidated."
+
+# --------------------------------------------------------------------------- body
+
+[body]
+required_h2 = ["## What it paid for",
+               "## Terms",
+               "## Outstanding",
+               "## What ending it early would cost"]
+optional_h2 = ["## Restructuring history"]
+sources_h3  = "### Sources"
+cite_style  = "inline-wikilink"
+
+# `## Outstanding` is a dated line, appended to, never overwritten. The point is the slope,
+# and a single figure that gets replaced each month destroys it.
+
+# --------------------------------------------------------------------------- view
+
+[view]
+columns = ["file.name", "bank", "principal", "currency", "monthly", "interest-rate",
+           "start-date", "end-date", "status", "account", "tags"]
+
+[[view.sort]]
+property  = "end-date"
+direction = "ASC"
+
+# --------------------------------------------------------------------------- skill
+
+[card-skill]
+modes    = ["single"]
+shared   = ["status-protocol", "card-concision"]
+rubrics  = []
+triggers = ["add a liability", "record a debt"]
+induces  = "metric-fixation"

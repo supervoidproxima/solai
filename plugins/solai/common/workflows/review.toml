@@ -1,0 +1,30 @@
+schema = 1
+
+# The workflow the package was built to run on itself: look, then attack what was found. Both
+# phases are pipelines, so a dimension that returns early gets refuted while a slower one is
+# still being read. Nothing here needs the whole prior set, so nothing here is a barrier.
+
+workflow = "review"
+title    = "Review"
+goal     = """Find what is wrong across several dimensions at once, then attack each finding hard \
+enough that what survives can be relied on."""
+input    = "A target to review (a folder, a deliverable, a diff) and the dimensions to review it along."
+output   = "A list of findings that survived refutation, each with its location, its quote and the verdict against it."
+run_when = "Something is about to be relied on by someone who did not write it."
+
+[[phases]]
+n      = 1
+title  = "Find"
+agent  = "scout"
+shape  = "pipeline"
+over   = "each dimension named in the request"
+carry  = "findings"
+detail = "One scout per dimension. A dimension is a lens, not a folder: two scouts over the same files looking for different things is the point."
+
+[[phases]]
+n      = 2
+title  = "Refute"
+agent  = "refuter"
+shape  = "pipeline"
+over   = "each finding the scouts returned"
+detail = "One refuter per finding, starting the moment that finding exists rather than when the last scout returns. A finding that cannot survive one honest attempt to break it was never a finding."

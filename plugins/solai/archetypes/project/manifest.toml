@@ -1,0 +1,227 @@
+schema    = 1
+archetype = "project"
+title     = "Project"
+summary   = "Card registries, an evidence chain from source to deliverable, and generated views. The shape any project takes when it has to survive its own length."
+
+# Top-level keys must precede the first table header. In TOML a bare key after `[ids]`
+# belongs to `ids`, and the failure is silent: the archetype loads with zero classes.
+classes = ["gap", "resolution", "pain", "proposal", "question"]
+lookups = []
+
+# All four. A diagnosis vault reads sources it did not write (scout, extractor),
+# states findings that must survive an owner disagreeing with them (refuter),
+# and ships prose to people outside the work (editor).
+agents = ["scout", "refuter", "extractor", "editor", "reconciler"]
+
+# All three. Sources arrive in batches (intake), findings have to survive an
+# owner disagreeing with them (review), and deliverables leave the place (polish).
+workflows = ["review", "intake", "polish"]
+
+[interview]
+asks = ["mode", "root", "name", "remit", "output_language",
+        "content_languages", "filename_language",
+        "governance_tier", "classes", "partition", "first_artefact"]
+
+[interview.defaults]
+# The opening line of the place, offered rather than imposed: the page fills it in
+# and stops the moment anyone edits it. A blank first field is a stall, and a
+# sentence nobody wrote is at least the sentence this type is for.
+first_artefact  = "One finding handed to the client, with what it costs and what to do."
+remit           = "One engagement, diagnosed: what was found, what it costs, and what should change."
+governance_tier = "standard"
+changes_folder  = "changes"
+
+[interview.partition]
+prompt  = "Top-level partition of the domain, as short codes. Blank for none."
+example = ["F2P", "S2C", "P2P", "R2R"]
+binds   = "stream"
+
+[ids]
+card          = "^[A-Z]{3}-[0-9]{3}$"
+change        = "^CHG-[0-9]{3}$"
+date          = "YYYY-MM-DD"
+property-case = "kebab"
+file-case     = "kebab"
+block-id      = "^\\^[0-9a-f]{6}$"
+
+
+# --------------------------------------------------------------------------- folders
+
+[[folders]]
+path = "registry"
+purpose = "card classes: the objects of analysis, one file per object"
+[[folders]]
+path = "sources"
+purpose = "what arrived from outside. Read-only once onboarded"
+[[folders]]
+path = "analysis"
+purpose = "working analyses. One analysis is one folder, named for its subject"
+[[folders]]
+path = "deliverables"
+purpose = "generated from cards. Never hand-edited"
+[[folders]]
+path = "changes"
+purpose = "change records, immutable once written"
+[[folders]]
+path = "_inbox"
+purpose = "unprocessed capture. Cleared, not archived"
+[[folders]]
+path = "_system"
+purpose = "vault infrastructure"
+[[folders]]
+path = "_system/scripts"
+purpose = "generators and checks, with a run-order contract in the readme"
+[[folders]]
+path = "_system/handoff"
+purpose = "session handoff notes, written at half context"
+[[folders]]
+path = "_system/runs"
+purpose = "dated audit output. Ephemeral and regenerable"
+[[folders]]
+path = "_system/os"
+purpose = "engine state. Out of scope of the vault's own governance"
+
+# --------------------------------------------------------------------------- artefacts
+
+[[artefacts]]
+id      = "claude-md"
+path    = "CLAUDE.md"
+mode    = "merged"
+emitter = "claudemd"
+regions = ["header", "purpose", "language", "constraints", "id-standard", "card-index",
+           "loop", "structure", "frontmatter", "naming", "citation", "handoff",
+           "change-discipline", "honesty"]
+generated = ["language", "id-standard", "card-index", "loop", "structure",
+             "frontmatter", "naming", "citation"]
+
+[[artefacts]]
+id      = "data-dictionary"
+path    = "_system/data-dictionary.md"
+mode    = "merged"
+emitter = "classes"
+regions = ["status-matrix", "enums", "derived", "schemas", "link-rules"]
+generated = ["status-matrix", "enums", "derived", "schemas", "link-rules"]
+
+[[artefacts]]
+id      = "vocabulary"
+path    = "_system/vocabulary.md"
+mode    = "merged"
+emitter = "vocabulary"
+regions = ["keys"]
+generated = ["keys"]
+
+[[artefacts]]
+id      = "start-here"
+path    = "START-HERE.md"
+mode    = "generated"
+emitter = "starthere"
+
+[[artefacts]]
+id      = "bond"
+path    = "_system/os/vault.md"
+mode    = "generated"
+emitter = "bond"
+
+[[artefacts]]
+id      = "state"
+path    = "_system/state.md"
+mode    = "seeded"
+fragment = "system/state.md"
+
+[[artefacts]]
+id      = "registry-base"
+path    = "registry.base"
+mode    = "generated"
+emitter = "bases"
+
+[[artefacts]]
+id      = "dashboard"
+path    = "dashboard.html"
+mode    = "generated"
+emitter = "dashboard"
+
+[[artefacts]]
+id      = "card-skills"
+path    = ".claude/skills/{skill}/SKILL.md"
+mode    = "merged"
+emitter = "cardskill"
+foreach = "classes"
+regions = ["frontmatter", "step-id", "step-fields", "step-body", "step-write"]
+generated = ["frontmatter", "step-id", "step-fields", "step-body", "step-write"]
+
+[[artefacts]]
+id    = "shared"
+path  = ".claude/skills/_shared/"
+mode  = "copied"
+from  = "shared/"
+files = ["status-protocol.md", "card-concision.md", "block-id-protocol.md"]
+
+[[artefacts]]
+id    = "scripts"
+path  = "_system/scripts/"
+mode  = "copied"
+from  = "runtime/"
+files = ["check_links.py", "stamp_check.py", "validate_cards.py", "gen_dashboard.py", "check_agents.py"]
+
+[[artefacts]]
+id       = "chg-001"
+path     = "changes/CHG-001.md"
+mode     = "seeded"
+fragment = "chg/chg-001.md"
+bootstrap = true
+
+[[artefacts]]
+id      = "agents"
+path    = ".claude/agents/{agent}.md"
+mode    = "merged"
+emitter = "agent"
+foreach = "agents"
+regions = ["frontmatter", "job", "returns", "evals"]
+generated = ["frontmatter", "job", "returns", "evals"]
+
+[[artefacts]]
+id      = "workflows"
+path    = ".claude/workflows/{workflow}.js"
+mode    = "merged"
+emitter = "workflow"
+foreach = "workflows"
+regions = ["meta", "script"]
+generated = ["meta", "script"]
+
+# --------------------------------------------------------------------------- loop
+
+[[loop]]
+n = 1
+name = "onboard a source"
+skill = "-"
+out = "sources/"
+[[loop]]
+n = 2
+name = "log what it shows: pains, proposals, questions"
+skill = "/pain /proposal /question"
+out = "registry/"
+[[loop]]
+n = 3
+name = "diagnose: state the gap between current and desired"
+skill = "/gap"
+out = "registry/gaps/"
+[[loop]]
+n = 4
+name = "recommend: one resolution over one or more gaps"
+skill = "/resolution"
+out = "registry/resolutions/"
+[[loop]]
+n = 5
+name = "check links, statuses and stamps"
+skill = "/solai check"
+out = "_system/runs/"
+[[loop]]
+n = 6
+name = "generate the deliverable from the cards"
+skill = "-"
+out = "deliverables/"
+[[loop]]
+n = 7
+name = "record what changed and why"
+skill = "/solai change"
+out = "changes/"

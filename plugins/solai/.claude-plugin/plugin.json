@@ -1,0 +1,9 @@
+{
+  "name": "solai",
+  "version": "0.19.2",
+  "description": "Bootstraps, audits and adopts Obsidian vaults. Card classes are declared once in TOML and projected into the data dictionary, CLAUDE.md, the card skill, the Base view and the validator. Greenfield and retrofit. Declares its own failure mode: authoring-instead-of-shipping.",
+  "author": {
+    "name": "Arman Sultanov"
+  },
+  "keywords": ["obsidian", "vault", "scaffolding", "governance", "knowledge-management"]
+}

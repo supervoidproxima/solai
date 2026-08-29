@@ -1,0 +1,29 @@
+schema = 1
+
+# Read the draft against the conventions, then edit it. Two pipelines: a file whose reading
+# finished gets edited immediately, because no edit to one file depends on any other file.
+
+workflow = "polish"
+title    = "Polish"
+goal     = """Bring a set of drafts into line with the conventions the place actually states, \
+without any edit changing what a sentence claims."""
+input    = "The drafts to polish, and the conventions to hold them to."
+output   = "Proposed edits per file, each naming the rule it applies, plus what was deliberately left alone."
+run_when = "A draft is finished and about to be read by someone outside the work."
+
+[[phases]]
+n      = 1
+title  = "Read"
+agent  = "scout"
+shape  = "pipeline"
+over   = "each draft in the set"
+carry  = "findings"
+detail = "Locate the passages a stated convention actually reaches. The scout returns candidates with quotes; it does not decide what to change."
+
+[[phases]]
+n      = 2
+title  = "Edit"
+agent  = "editor"
+shape  = "pipeline"
+over   = "each draft, as soon as its own reading returns"
+detail = "Propose line-level edits for that one draft. Nothing is applied: the caller applies the diff, or does not."

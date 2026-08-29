@@ -1,0 +1,101 @@
+schema = 1
+
+# A pain is what somebody said hurts. It is evidence, not diagnosis: the diagnosis is a
+# gap. Keeping them separate is what stops a vault mistaking the loudest complaint for the
+# largest problem.
+
+class     = "pain"
+prefix    = "PAN"
+folder    = "registry/pains"
+skill     = "pain"
+title     = "Pain"
+purpose   = "A difficulty stated by a named person, or confirmed by a pattern across several sources."
+minted_by = "skill:pain"
+
+[status]
+lifecycle = ["on-review", "open"]
+terminal  = ["archived"]
+default   = "on-review"
+
+[status.notes]
+"on-review" = "recorded, not yet validated against anything else."
+"open"      = "corroborated."
+"archived"  = "withdrawn, absorbed, or out of perimeter."
+
+[status.rules]
+terminal_callout = true
+
+[[fields]]
+name     = "title"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The difficulty in one phrase, in the speaker's terms rather than the analyst's."
+
+[[fields]]
+name     = "severity"
+type     = "enum"
+card     = "1"
+required = true
+values   = ["high", "medium", "low"]
+meaning  = "By consequence, mirroring the gap scale so the two can be read together."
+
+[[fields]]
+name    = "source-type"
+type    = "enum"
+card    = "0..1"
+values  = ["interview", "survey", "meeting", "document", "observation"]
+meaning = "How it reached the vault. Shapes how much weight one voice carries."
+
+[[fields]]
+name    = "stream"
+type    = "list<wl>"
+card    = "0..N"
+source  = "partition"
+
+[[links]]
+field   = "gap"
+target  = "gap"
+card    = "0..N"
+kind    = "one-way"
+meaning = "The gap this is a symptom of."
+
+[[links]]
+field   = "proposal"
+target  = "proposal"
+card    = "0..N"
+kind    = "one-way"
+
+[[links]]
+field   = "question"
+target  = "question"
+card    = "0..N"
+kind    = "one-way"
+
+[[links]]
+field   = "related"
+target  = "pain"
+card    = "0..N"
+kind    = "lateral"
+
+[body]
+required_h2 = []
+optional_h2 = []
+sources_h3  = "### Sources"
+cite_style  = "footnotes"
+
+# No H2 skeleton on purpose. A pain is a quotation plus a sentence of context; imposing
+# four headings on it produces four headings and one sentence spread thin.
+
+[view]
+columns = ["file.name", "title", "status", "severity", "source-type", "stream", "gap", "tags"]
+
+[[view.sort]]
+property  = "severity"
+direction = "ASC"
+
+[card-skill]
+modes   = ["single", "sweep"]
+shared  = ["status-protocol", "card-concision", "block-id-protocol"]
+rubrics = ["severity"]
+induces = "none"

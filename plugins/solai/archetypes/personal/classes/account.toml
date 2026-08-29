@@ -1,0 +1,140 @@
+schema = 1
+
+# An account card is a dimension, not a ledger. It holds what is true about the account and
+# one certified balance with the date it was certified on. Transactions do not live here, and
+# the balance is never inferred: it is copied from a statement or it is absent.
+
+class     = "account"
+prefix    = "ACC"
+folder    = "finance/dimensions/dim-account"
+skill     = "account"
+title     = "Account"
+purpose   = "One place money sits. Its terms, its role in the system, and its last certified balance."
+minted_by = "skill:account"
+
+[status]
+lifecycle = ["open"]
+terminal  = ["closed"]
+default   = "open"
+
+[status.notes]
+"open"   = "usable. Counts towards every total the vault reports."
+"closed" = "shut. Drops out of totals but stays on disk, because a closed account still explains transfers that reference it."
+
+[status.rules]
+terminal_callout        = true
+terminal_relaxes_schema = true
+
+# --------------------------------------------------------------------------- fields
+
+[[fields]]
+name     = "bank"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The institution, in one spelling. Two spellings of one bank make every grouping wrong and nothing complains."
+
+[[fields]]
+name     = "account-type"
+type     = "enum"
+card     = "1"
+required = true
+values   = ["current", "deposit", "investment", "restricted"]
+meaning  = "What kind of account it is, which is a fact about the product."
+[fields.value_notes]
+current    = "spendable on demand."
+deposit    = "term or savings, withdrawable with notice or penalty."
+investment = "brokerage or fund holdings, valued rather than counted."
+restricted = "legally or contractually not yours to spend yet."
+
+[[fields]]
+name     = "role"
+type     = "enum"
+card     = "1"
+required = true
+values   = ["operating", "reserve", "restricted"]
+meaning  = "What the account is FOR, which is a decision you made and can revise. Kept separate from `account-type` on purpose: a deposit account used as the operating buffer is a real and common arrangement, and collapsing the two hides it."
+
+[[fields]]
+name     = "currency"
+type     = "enum"
+card     = "1"
+required = true
+values   = ["KZT", "USD", "EUR", "GBP", "AED"]
+meaning  = "ISO code. Totals across currencies are refused rather than converted at a rate nobody recorded."
+
+[[fields]]
+name     = "balance"
+type     = "scalar"
+card     = "0..1"
+meaning  = "The last balance certified against a statement. Never a running total the vault computed for itself."
+
+[[fields]]
+name     = "as-of"
+type     = "date"
+card     = "0..1"
+meaning  = "The date that balance was true. A balance without an as-of is not a balance, and the validator treats the pair as one field."
+
+[[fields]]
+name    = "iban"
+type    = "scalar"
+card    = "0..1"
+meaning = "Where one exists."
+
+[[fields]]
+name    = "rate"
+type    = "scalar"
+card    = "0..1"
+meaning = "Annual interest, as written in the contract. Empty on anything that pays nothing."
+
+# --------------------------------------------------------------------------- links
+
+[[links]]
+field   = "liability"
+target  = "liability"
+card    = "0..N"
+kind    = "one-way"
+meaning = "Debts serviced from this account. What makes a monthly outflow traceable to the thing causing it."
+
+[[links]]
+field   = "related"
+target  = "account"
+card    = "0..N"
+kind    = "lateral"
+meaning = "An account this one feeds or was replaced by."
+
+# --------------------------------------------------------------------------- body
+
+[body]
+required_h2 = ["## What it is for",
+               "## Terms",
+               "## How the balance is certified"]
+optional_h2 = ["## Restrictions"]
+sources_h3  = "### Sources"
+cite_style  = "inline-wikilink"
+
+# `## How the balance is certified` names the statement the number came from. It exists so
+# that "where did this figure come from" has an answer that is not "I think I checked".
+
+# --------------------------------------------------------------------------- view
+
+[view]
+columns = ["file.name", "bank", "account-type", "role", "currency", "balance", "as-of",
+           "status", "liability", "tags"]
+
+[[view.sort]]
+property  = "role"
+direction = "ASC"
+
+[[view.sort]]
+property  = "bank"
+direction = "ASC"
+
+# --------------------------------------------------------------------------- skill
+
+[card-skill]
+modes    = ["single"]
+shared   = ["status-protocol", "card-concision"]
+rubrics  = ["account-type", "role"]
+triggers = ["add an account", "record a balance"]
+induces  = "metric-fixation"

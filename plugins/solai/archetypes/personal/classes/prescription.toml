@@ -1,0 +1,138 @@
+schema = 1
+
+# A prescription is the only class here with a genuine lifecycle: it starts, it runs, it
+# stops. The stop date matters as much as the start, because the question asked of this class
+# months later is almost always "what was I on at the time".
+
+class     = "prescription"
+prefix    = "RX"
+folder    = "wellbeing/prescriptions"
+skill     = "prescription"
+title     = "Prescription"
+purpose   = "One drug, one course. What was taken, at what dose, on whose instruction, and between which dates."
+minted_by = "skill:prescription"
+
+[status]
+lifecycle = ["ongoing"]
+terminal  = ["finished", "stopped"]
+default   = "ongoing"
+
+[status.notes]
+"ongoing"  = "being taken now. A card in this state with a `stopped` date filled in is a defect, and the validator says so."
+"finished" = "the course ran to its intended end."
+"stopped"  = "ended early: side effects, a change of plan, or it was not working. Distinct from `finished` because the reason is the clinically interesting part."
+
+[status.rules]
+terminal_callout        = true
+terminal_relaxes_schema = false
+
+# Terminal does NOT relax the schema here, unlike every other class in this archetype. A
+# finished course is the case you look up later, so it is the one that must still carry its
+# dose and its dates.
+
+# --------------------------------------------------------------------------- fields
+
+[[fields]]
+name     = "drug"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "The active substance, with the brand in brackets where that is how it was dispensed. Substance first: brands differ by country and the substance is what matters."
+
+[[fields]]
+name     = "dose"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "Amount per administration, with units. Never bare numbers."
+
+[[fields]]
+name     = "frequency"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "How often, as instructed. `as needed` is a valid answer and a meaningful one."
+
+[[fields]]
+name    = "route"
+type    = "scalar"
+card    = "0..1"
+meaning = "Oral, topical, injected. Omit only when there is exactly one way to take it."
+
+[[fields]]
+name     = "reason"
+type     = "scalar"
+card     = "1"
+required = true
+meaning  = "What it was prescribed for, in the words used at the time. A course with no recorded reason cannot be reviewed later."
+
+[[fields]]
+name    = "prescriber"
+type    = "scalar"
+card    = "0..1"
+meaning = "Who prescribed it. Empty for anything bought over the counter, which is worth being able to filter for."
+
+[[fields]]
+name     = "started"
+type     = "date"
+card     = "1"
+required = true
+meaning  = "First day taken. Not the date on the paper: the date it actually began."
+
+[[fields]]
+name    = "stopped"
+type    = "date"
+card    = "0..1"
+meaning = "Last day taken. Required in practice by the status rule, not by the field: an ongoing course has no stop date yet."
+
+# --------------------------------------------------------------------------- links
+
+[[links]]
+field   = "visit"
+target  = "visit"
+card    = "0..N"
+kind    = "one-way"
+meaning = "The appointment it was written at."
+
+[[links]]
+field   = "related"
+target  = "prescription"
+card    = "0..N"
+kind    = "lateral"
+meaning = "The course this one replaced, or a drug taken alongside it where the combination is the point."
+
+# --------------------------------------------------------------------------- body
+
+[body]
+required_h2 = ["## Why it was prescribed",
+               "## How it went",
+               "## Why it stopped"]
+optional_h2 = ["## Interactions and cautions"]
+sources_h3  = "### Sources"
+cite_style  = "inline-wikilink"
+
+# `## Why it stopped` carries Unknown while the course is ongoing. The heading stays: an
+# absent heading reads as "it did not stop", which is a different claim.
+
+# --------------------------------------------------------------------------- view
+
+[view]
+columns = ["file.name", "drug", "dose", "frequency", "reason", "status", "started",
+           "stopped", "prescriber", "visit", "tags"]
+
+[[view.sort]]
+property  = "status"
+direction = "ASC"
+
+[[view.sort]]
+property  = "started"
+direction = "DESC"
+
+# --------------------------------------------------------------------------- skill
+
+[card-skill]
+modes    = ["single"]
+shared   = ["status-protocol", "card-concision"]
+rubrics  = []
+triggers = ["record a prescription", "log a medication"]
+induces  = "none"
