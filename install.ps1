@@ -28,10 +28,10 @@
   The private configuration repository, as owner/name. Default: the constant below.
 
 .EXAMPLE
-  irm https://raw.githubusercontent.com/OWNER/solai/main/install.ps1 | iex
+  irm https://raw.githubusercontent.com/supervoidproxima/solai/main/install.ps1 | iex
 
 .EXAMPLE
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/OWNER/solai/main/install.ps1))) -DryRun
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/supervoidproxima/solai/main/install.ps1))) -DryRun
 #>
 [CmdletBinding()]
 param(
@@ -39,8 +39,8 @@ param(
   [switch] $SkipApps,
   [switch] $PublicOnly,
   [switch] $NoHandoff,
-  [string] $PackageRepo = 'OWNER/solai',
-  [string] $ConfigRepo  = 'OWNER/claude-config'
+  [string] $PackageRepo = 'supervoidproxima/solai',
+  [string] $ConfigRepo  = 'supervoidproxima/claude-config'
 )
 
 $ErrorActionPreference = 'Stop'

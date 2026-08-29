@@ -12,7 +12,7 @@ reproduce itself, and starting a third vault meant retyping one half and forgett
 ## Install
 
 ```
-/plugin marketplace add OWNER/solai
+/plugin marketplace add supervoidproxima/solai
 /plugin install solai@solai
 ```
 

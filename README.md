@@ -7,7 +7,7 @@ working vault.
 ## Install, on a machine with nothing
 
 ```powershell
-irm https://raw.githubusercontent.com/OWNER/solai/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/supervoidproxima/solai/main/install.ps1 | iex
 ```
 
 That installs Git, Python, Obsidian and Claude Code, registers this package as a plugin, and
@@ -17,13 +17,13 @@ twice, and prints what is left for you to do by hand.
 To see what it would do without doing any of it:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/OWNER/solai/main/install.ps1))) -DryRun
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/supervoidproxima/solai/main/install.ps1))) -DryRun
 ```
 
 ## Install, on a machine you already work on
 
 ```
-/plugin marketplace add OWNER/solai
+/plugin marketplace add supervoidproxima/solai
 /plugin install solai@solai
 ```
 
