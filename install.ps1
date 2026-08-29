@@ -183,9 +183,14 @@ if (Have 'claude') {
 # --------------------------------------------------------------------------- 3. the plugin
 Write-Stage 'the solai plugin'
 
+# A GitHub-sourced marketplace is cloned into plugins\marketplaces\<name>; a directory-sourced
+# one is registered in place. Ask the register, not the disk.
+$known      = Join-Path $claudeDir 'plugins\known_marketplaces.json'
+$registered = (Test-Path $known) -and ((Get-Content $known -Raw) -match '"solai"')
+
 if (-not (Have 'claude')) {
   Need ('register the plugin once Claude Code is installed: /plugin marketplace add ' + $PackageRepo)
-} elseif (Test-Path $marketDir) {
+} elseif ($registered) {
   & claude plugin marketplace update solai 2>&1 | Out-Null
   Say 'ok' 'marketplace already registered, updated'
 } else {
