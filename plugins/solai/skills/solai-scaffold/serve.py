@@ -461,8 +461,10 @@ class Handler(BaseHTTPRequestHandler):
             if not given:
                 return 200, {'files': 0, 'errors': []}
             found, errs = engine.collect_materials(given, root or os.getcwd())
+            # The name shown is the one the file takes inside the inbox, not its basename: a
+            # mirrored subfolder is the reason two documents of one name can both be here.
             return 200, {'files': len(found), 'errors': errs,
-                         'names': [os.path.basename(f) for f in found[:12]]}
+                         'names': [rel for _, rel in found[:12]]}
 
         if route == '/api/mkdir':
             root = os.path.abspath(root)

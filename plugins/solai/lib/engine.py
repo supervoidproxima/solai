@@ -128,34 +128,61 @@ def merge_regions(existing, region_text, expected_src, order, force=()):
 # --------------------------------------------------------------------------- the build
 
 def collect_materials(paths, root):
-    """-> (files, errors). A path is a file or a folder; a folder is walked. Two source files
-    with one basename are refused by name rather than silently overwriting one another, and a
-    path inside the place itself is refused because copying a place into its own inbox is
-    never what was meant."""
-    files, errors, seen = [], [], {}
+    """-> (files, errors), where a file is the pair (source, name it takes inside the vault).
+    A path is a file or a folder; a folder is walked and its tree is mirrored, so two documents
+    that share a basename in different subfolders both arrive and neither overwrites the other.
+    A name is only refused when two of the given paths hold it at the same relative place and
+    the folders they came from cannot tell them apart either. A path inside the vault itself is
+    refused, because copying a vault into its own inbox is never what was meant."""
+    picked, errors = [], []
     for given in paths:
         p = os.path.abspath(given)
         if not fsplan.exists(p):
             errors.append('no such path: %s' % given)
             continue
-        if os.path.abspath(p).startswith(os.path.abspath(root) + os.sep):
-            errors.append('%s is inside the place itself' % given)
+        if p.startswith(os.path.abspath(root) + os.sep):
+            errors.append('%s is inside the vault itself' % given)
             continue
-        found = []
         if os.path.isdir(fsplan.w(p)):
-            for base, dirs, names in os.walk(fsplan.w(p)):
+            base_dir = fsplan.w(p)
+            for base, dirs, names in os.walk(base_dir):
                 dirs[:] = [d for d in dirs if not d.startswith('.')]
-                found += [os.path.join(base, n) for n in sorted(names) if not n.startswith('.')]
+                for n in sorted(names):
+                    if n.startswith('.'):
+                        continue
+                    f = os.path.join(base, n)
+                    picked.append((f, _material_rel(f, base_dir), os.path.basename(p)))
         else:
-            found = [p]
-        for f in found:
-            name = os.path.basename(f)
-            if name in seen and seen[name] != f:
-                errors.append('two files are called %s: %s and %s' % (name, seen[name], f))
+            picked.append((p, os.path.basename(p), os.path.basename(os.path.dirname(p))))
+
+    # One relative name may be claimed by more than one of the given paths. Prefixing each with
+    # the folder it came from separates them; only when that fails too is anything refused, and
+    # then the message says what to do about it.
+    by_rel = {}
+    for source, rel, origin in picked:
+        by_rel.setdefault(rel, []).append((source, origin))
+    files = []
+    for rel, group in sorted(by_rel.items()):
+        if len(set(source for source, _ in group)) == 1:
+            files.append((group[0][0], rel))
+            continue
+        taken = {}
+        for source, origin in group:
+            name = (origin + '/' + rel) if origin else rel
+            if taken.get(name, source) != source:
+                errors.append('two files are called %s: %s and %s. Hand in the one folder that '
+                              'holds both, instead of the two paths, or rename one of them.'
+                              % (rel, taken[name], source))
                 continue
-            seen[name] = f
-            files.append(f)
+            taken[name] = source
+        files += [(source, name) for name, source in taken.items()]
     return sorted(set(files)), errors
+
+
+def _material_rel(path, base_dir):
+    """The name a walked file takes inside the inbox: its path under the folder that was
+    handed in, with forward slashes, which is what `fsplan.Plan.path` expects."""
+    return os.path.relpath(path, base_dir).replace(os.sep, '/')
 
 
 def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), materials=()):
@@ -223,8 +250,8 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
             found, errs = collect_materials(materials, root)
             for e in errs:
                 result.errors.append('materials: %s' % e)
-            for source in found:
-                target = dest + '/' + os.path.basename(source)
+            for source, rel in found:
+                target = dest + '/' + rel
                 here = plan.path(target)
                 if fsplan.exists(here):
                     if fsplan.bytes_sha(source) == fsplan.bytes_sha(here):

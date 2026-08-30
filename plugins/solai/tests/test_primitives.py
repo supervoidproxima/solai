@@ -24,7 +24,7 @@ import tempfile
 
 from lib import fm, fsplan, regions, stamp
 
-EXPECTED = 61
+EXPECTED = 62
 NAME = 'primitives'
 
 VERSION = '0.4.0'
@@ -352,10 +352,10 @@ def group_materials(s):
     try:
         src = os.path.join(tmp, 'src')
         os.makedirs(os.path.join(src, 'deep'))
-        for rel in ('jd.md', 'deep/order.txt', '.hidden.md'):
+        for rel in ('jd.md', 'deep/order.txt', 'deep/jd.md', '.hidden.md'):
             with io.open(os.path.join(src, rel.replace('/', os.sep)), 'w',
                          encoding='utf-8', newline='\n') as fh:
-                fh.write('x\n')
+                fh.write('x ' + rel + '\n')
         binary = os.path.join(src, 'plan.pdf')
         with open(binary, 'wb') as fh:
             fh.write(b'%PDF-1.4\xff\xfe\x80 not decodable as utf-8')
@@ -364,9 +364,10 @@ def group_materials(s):
         os.makedirs(root)
 
         files, errors = engine.collect_materials([src], root)
-        s.eq('MAT-01', 'a folder is walked, and a dotfile is not swept up with the rest',
-             sorted(os.path.basename(f) for f in files),
-             ['jd.md', 'order.txt', 'plan.pdf'])
+        s.eq('MAT-01', 'a folder is walked, its tree mirrored so a name repeated in a subfolder '
+                       'arrives too, and a dotfile is not swept up with the rest',
+             (sorted(rel for _, rel in files), errors),
+             (['deep/jd.md', 'deep/order.txt', 'jd.md', 'plan.pdf'], []))
 
         files, errors = engine.collect_materials([os.path.join(tmp, 'nope')], root)
         s.ok('MAT-02', 'a path that is not there is refused by name and contributes no files',
@@ -377,14 +378,28 @@ def group_materials(s):
         with io.open(os.path.join(twin, 'jd.md'), 'w', encoding='utf-8', newline='\n') as fh:
             fh.write('a different job description\n')
         files, errors = engine.collect_materials([src, twin], root)
-        s.ok('MAT-03', 'two sources with one basename are refused, both named',
-             any('two files are called jd.md' in e for e in errors), repr(errors))
+        s.eq('MAT-03', 'one basename in two given folders is kept apart by the folder each came '
+                       'from, and the names that do not clash are left alone',
+             (sorted(rel for _, rel in files), errors),
+             (['deep/jd.md', 'deep/order.txt', 'plan.pdf', 'src/jd.md', 'twin/jd.md'], []))
+
+        for same in ('a', 'b'):
+            os.makedirs(os.path.join(tmp, same, 'dup'))
+            with io.open(os.path.join(tmp, same, 'dup', 'x.md'), 'w',
+                         encoding='utf-8', newline='\n') as fh:
+                fh.write('from ' + same + '\n')
+        files, errors = engine.collect_materials(
+            [os.path.join(tmp, 'a', 'dup'), os.path.join(tmp, 'b', 'dup')], root)
+        s.ok('MAT-06', 'when the folder names cannot tell two files apart either, the refusal '
+                       'says what to do instead of only that it happened',
+             any('two files are called x.md' in e and 'one folder that holds both' in e
+                 for e in errors), repr(errors))
 
         inside = os.path.join(root, 'sub')
         os.makedirs(inside)
         files, errors = engine.collect_materials([inside], root)
-        s.ok('MAT-04', 'a path inside the place itself is refused rather than copied into it',
-             not files and any('inside the place' in e for e in errors), repr(errors))
+        s.ok('MAT-04', 'a path inside the vault itself is refused rather than copied into it',
+             not files and any('inside the vault' in e for e in errors), repr(errors))
 
         s.ok('MAT-05', 'a binary hashes, which is what keeps the second plan NOOP',
              fsplan.bytes_sha(binary) is not None

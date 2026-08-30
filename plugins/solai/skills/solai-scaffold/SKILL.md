@@ -32,12 +32,15 @@ py ${CLAUDE_PLUGIN_ROOT}/skills/solai-scaffold/scaffold.py "<vault>" \
 `--plan` is the default and writes nothing. Always show the plan table before `--apply`.
 
 `--materials` is repeatable. Each path is a file or a folder of documents prepared for the
-place; every file lands as a COPY row in the plan, in the folder the archetype declares for
+vault; every file lands as a COPY row in the plan, in the folder the archetype declares for
 unprocessed capture (`_inbox` unless a manifest says otherwise). The engine does not open
 them. Deciding which of them constitutes the role and which is background is judgement, and
 judgement belongs to a session with an agent in it, not to a plan that must stay a projection
-of the declarations (D12). A missing path, two files with one basename, and a path inside
-the place itself are all refused by name.
+of the declarations (D12). A folder's tree is mirrored inside the inbox, so two documents
+sharing a name in different subfolders both arrive, each under the subfolder it came from. A
+missing path and a path inside the vault itself are refused by name; so is one name claimed by
+two of the given paths whose own folder names cannot tell them apart either, and that refusal
+says to hand in the one folder holding both instead.
 
 ## What it guarantees
 
