@@ -125,7 +125,12 @@ def step_body(c, L):
     lines += ['',
               'A required heading with nothing to say carries the single word `Unknown`. The '
               'heading is never dropped: an absent heading reads as "not applicable", and '
-              'absence is a value, not silence.']
+              'absence is a value, not silence.',
+              '',
+              '**This applies to body headings only, never to a frontmatter field.** An '
+              'enumerated field takes one of its declared values or the card fails `CL-5`; '
+              'an optional field with nothing to put in it is left **empty**, which already '
+              'says "not stated" and says it in a form the validator can read.']
     if c.cite_style == 'footnotes':
         lines += ['',
                   'Citations are markdown footnotes: `[^N]` at the claim, and `[^N]: [[file#^anchor]]` '

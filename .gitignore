@@ -14,3 +14,7 @@ private/
 # Vaults built while testing. A built vault is an output, not part of the package, and a
 # folder under plugins/ would be read as a plugin.
 plugins/SMP/
+
+# The setup surface writes a run log beside itself, carrying a loopback key and the
+# absolute path of the machine that ran it. Machine-local, and this repository is public.
+server.log

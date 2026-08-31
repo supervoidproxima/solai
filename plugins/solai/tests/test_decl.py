@@ -355,7 +355,7 @@ def group_archetype(s):
              ((),
               ('scout', 'refuter', 'extractor', 'editor', 'reconciler'),
               ('extractor', 'editor'),
-              ('scout', 'refuter', 'extractor', 'editor')))
+              ('scout', 'refuter', 'extractor', 'editor', 'reader')))
 
         s.ok('DA-21', 'a shared agent resolves from common/agents without living in the archetype',
              all(os.path.join('common', 'agents') in a.path.replace('/', os.sep)

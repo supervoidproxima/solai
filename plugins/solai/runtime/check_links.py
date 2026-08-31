@@ -36,6 +36,11 @@ def index(root):
             by_name.setdefault(stem, []).append(rel)
             by_name.setdefault(name, []).append(rel)
             by_name.setdefault(os.path.splitext(rel)[0], []).append(rel)
+            # `[[folder/file.docx]]`: the relative path WITH its extension. Obsidian
+            # accepts that form and writes it when linking to an attachment. Leaving
+            # it out reported every citation to a PDF or DOCX as broken, which trains
+            # people to ignore this checker.
+            by_name.setdefault(rel, []).append(rel)
     return by_name, all_files
 
 

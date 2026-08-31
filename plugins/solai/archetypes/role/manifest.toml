@@ -8,11 +8,16 @@ summary   = "A role you have taken up: what it owes, what leaves because of it, 
 classes = ["obligation", "deliverable", "decision"]
 lookups = []
 
-# All four. A role is defined by documents it did not write and reads them cold (scout,
-# extractor); an obligation is a reading of a clause and someone senior may read it
-# differently (refuter); and every deliverable is prose a person outside the place judges
+# All four, plus the reader. A role is defined by documents it did not write and reads them
+# cold (scout, extractor); an obligation is a reading of a clause and someone senior may read
+# it differently (refuter); and every deliverable is prose a person outside the place judges
 # (editor).
-agents = ["scout", "refuter", "extractor", "editor"]
+#
+# The reader is here because the documents that constitute a role arrive as Word, Excel,
+# PowerPoint and PDF. The scout can find them and the extractor can turn a readable source
+# into records, but neither can get the words out of a deck, and a role vault hits that on
+# its first day.
+agents = ["scout", "refuter", "extractor", "editor", "reader"]
 
 # Two. The constitutive documents arrive as a batch to be read down into obligations
 # (intake), and everything that leaves is read by someone who did not write it (polish).
@@ -28,7 +33,30 @@ workflows = ["intake", "polish"]
 [interview]
 asks = ["mode", "root", "name", "remit", "output_language",
         "content_languages", "filename_language",
+        "holder", "succession", "corpus",
         "governance_tier", "classes", "partition", "first_artefact"]
+
+# `holder` and `succession` are asked before anything is built, because the answer to the
+# second changes what the vault is for. A role taken over from someone else does not begin
+# by reading its charter down into obligations: it begins by finding out whether a charter
+# exists at all. Most of what a successor inherits is a predecessor's practice, which is a
+# weaker thing than a clause and has to be recorded as such from the first card, not
+# retrofitted onto fifteen of them later.
+#
+# Not asking has a measured cost. In one vault the succession surfaced forty exchanges in,
+# by accident, when the annual plan turned out to name a different person throughout. Every
+# obligation card had to be reopened to say whose practice it recorded.
+
+[interview.holder]
+prompt = "Who holds this role? The name seeds `people/`, and it is what separates your own work from your predecessor's in everything the vault reads later."
+
+[interview.succession]
+prompt  = "Are you the first holder of this role, or did you take it over from someone?"
+values  = ["first", "successor", "unknown"]
+default = "unknown"
+
+[interview.corpus]
+prompt = "Where do you already keep this work? A folder path, or blank. The vault starts empty and the work does not, and counting what already exists is the difference between a plan and a guess."
 
 [interview.defaults]
 # The opening line of the place, offered rather than imposed: the page fills it in

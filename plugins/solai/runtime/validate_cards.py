@@ -217,8 +217,13 @@ def fam_CL(cards, decls, add):
                 continue
             val = fm_scalar(fm, f['name'])
             if val and f.get('values') and val not in f['values']:
-                add('CL-5', BLOCKER, rel, '%s is %r, not one of %s'
-                    % (f['name'], val, ', '.join(f['values'])))
+                # `Unknown` here is the commonest way this fires: the body-heading
+                # rule gets applied to a field. An optional field is left empty.
+                hint = ('. This field is optional: leave it empty rather than writing '
+                        '%r. The `Unknown` convention is for body headings only' % val
+                        if val.lower() in ('unknown', 'n/a', 'none', 'tbd', '?') else '')
+                add('CL-5', BLOCKER, rel, '%s is %r, not one of %s%s'
+                    % (f['name'], val, ', '.join(f['values']), hint))
         if terminal and c.rules.get('terminal_callout'):
             first = next((l for l in body.split('\n') if l.strip()), '')
             if not first.strip().startswith('>'):
@@ -373,6 +378,16 @@ def fam_AV(root, cards, add):
                 system += 1
             else:
                 content += 1
+    # What actually left. A deliverable is shipped when it carries a date, never
+    # because its status says so: a status is set by hand, a date has to be one.
+    shipped = promised = 0
+    for rel, card in cards.items():
+        if getattr(card['class'], 'prefix', '') != 'DLV':
+            continue
+        promised += 1
+        if (fm_scalar(card['fm'], 'sent-on') or '').strip():
+            shipped += 1
+
     if content == 0 and system > 0:
         add('AV-2', GATE, '.',
             '%d system files, 0 content files. Nothing here has been written yet, so '
@@ -382,7 +397,22 @@ def fam_AV(root, cards, add):
         add('AV-1', WARN, '.',
             'system %d to content %d. Machinery is outpacing the work it exists to serve'
             % (system, content))
-    return {'system': system, 'content': content}
+
+    # AV-2 counts markdown, and markdown is easy to generate. A vault can silence
+    # it by writing notes about itself without anything reaching a recipient, which
+    # is the avoidance the family is named for. This counts the only honest number.
+    if shipped == 0:
+        add('AV-3', GATE, '.',
+            '%d content files, %d deliverables promised, 0 sent. Nothing has left this '
+            'place. Writing more of it will not change that number'
+            % (content, promised))
+    elif content > shipped * 20:
+        add('AV-4', WARN, '.',
+            '%d content files to %d sent. Documents are outpacing what leaves by more '
+            'than twenty to one' % (content, shipped))
+
+    return {'system': system, 'content': content,
+            'promised': promised, 'shipped': shipped}
 
 
 # --------------------------------------------------------------------------- main

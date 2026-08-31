@@ -3,38 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <title>Solai</title>
 <style>
 :root{
-  --bg:#f6f6f3; --panel:#fffffe; --sunk:#f0f0ec; --ink:#191a17; --ink-2:#4a4b46;
-  --muted:#6b6c65; --line:#e4e4de; --line-2:#d3d3cb;
-  --accent:#276b4c; --accent-soft:#e6f0e9; --accent-ink:#ffffff;
-  --warn:#8a5220; --warn-soft:#f6ece1; --refuse:#98302c;
-  --shadow:0 1px 2px rgba(25,26,23,.04), 0 8px 24px -12px rgba(25,26,23,.10);
-  --r:12px; --r-sm:8px;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#131417; --panel:#1b1d21; --sunk:#171a1d; --ink:#ecece8; --ink-2:#c3c4be;
-    --muted:#93958f; --line:#333741; --line-2:#434852;
-    --accent:#68b389; --accent-soft:#1c2a23; --accent-ink:#0e1210;
-    --warn:#d9a468; --warn-soft:#2a2318; --refuse:#e58079;
-    --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 32px -16px rgba(0,0,0,.55);
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#131417; --panel:#1b1d21; --sunk:#171a1d; --ink:#ecece8; --ink-2:#c3c4be;
-  --muted:#93958f; --line:#333741; --line-2:#434852;
-  --accent:#68b389; --accent-soft:#1c2a23; --accent-ink:#0e1210;
-  --warn:#d9a468; --warn-soft:#2a2318; --refuse:#e58079;
-  --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 32px -16px rgba(0,0,0,.55);
+  color-scheme:dark;
+  --bg:#14161a; --panel:#1a1d22; --sunk:#1f232a; --ink:#eceae5; --ink-2:#c2c1ba;
+  --muted:#8b8e8b; --line:#2b2f36; --line-2:#3a3f48;
+  --accent:#e0b46c; --accent-soft:#251f15; --accent-ink:#1a1408;
+  --ok:#71b58c; --ok-soft:#16241c;
+  --warn:#d98a3e; --warn-soft:#2a2016; --refuse:#e8756a;
+  --shadow:0 1px 2px rgba(0,0,0,.42), 0 14px 34px -18px rgba(0,0,0,.75);
+  --r:6px; --r-sm:4px;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Inter,sans-serif;
+  font:15px/1.6 "IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   -webkit-font-smoothing:antialiased}
-.mono{font-family:ui-monospace,SFMono-Regular,"Cascadia Mono",Consolas,monospace}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace}
 
 /* ------------------------------------------------------------------ shell */
 .shell{max-width:1100px;margin:0 auto;padding:40px 28px 100px;
@@ -48,13 +35,14 @@ body{margin:0;background:var(--bg);color:var(--ink);
 @media (max-width:900px){.rail{position:static}}
 .mark{display:flex;align-items:center;gap:10px;margin-bottom:26px}
 .mark svg{flex:0 0 auto}
-.word{font-size:19px;font-weight:650;letter-spacing:-.015em;margin:0}
+.word{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:18px;font-weight:600;
+  letter-spacing:-.02em;margin:0}
 .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
 @media (max-width:900px){.steps{flex-direction:row;flex-wrap:wrap;gap:6px;margin-bottom:6px}}
 .steps li{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:var(--r-sm);
   font-size:13.5px;color:var(--muted);transition:background .12s,color .12s}
 .steps li .dot{flex:0 0 20px;height:20px;border-radius:99px;border:1px solid var(--line-2);
-  display:grid;place-items:center;font:600 11px/1 ui-monospace,Consolas,monospace;
+  display:grid;place-items:center;font:600 11px/1 "IBM Plex Mono",ui-monospace,Consolas,monospace;
   color:var(--muted);background:var(--panel);transition:all .12s}
 .steps li.current{color:var(--ink);background:var(--panel);box-shadow:var(--shadow)}
 .steps li.current .dot{border-color:var(--accent);color:var(--accent)}
@@ -76,9 +64,10 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .step.off{pointer-events:none;background:transparent;box-shadow:none;border-style:dashed}
 .step.off>h2{color:var(--muted)}
 .step.off>*:not(h2){opacity:.4}
-.step>h2{margin:0 0 2px;font-size:16.5px;font-weight:640;letter-spacing:-.01em;
+.step>h2{margin:0 0 2px;font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:16px;font-weight:500;
+  letter-spacing:-.02em;
   display:flex;align-items:baseline;gap:10px}
-.step>h2 .idx{font:600 11px/1 ui-monospace,Consolas,monospace;color:var(--muted);
+.step>h2 .idx{font:600 11px/1 "IBM Plex Mono",ui-monospace,Consolas,monospace;color:var(--muted);
   border:1px solid var(--line);border-radius:99px;padding:5px 8px}
 .opts{display:flex;gap:10px;flex-wrap:wrap}
 .opt{border:1px solid var(--line);border-radius:999px;padding:11px 22px;
@@ -97,7 +86,7 @@ input[type=text],input[type=date],textarea,select{
   width:100%;background:var(--sunk);color:var(--ink);border:1px solid var(--line);
   border-radius:var(--r-sm);padding:10px 12px;transition:border-color .12s;
   font-family:inherit;font-size:14px;line-height:1.45}
-input[type=text]{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px}
+input[type=text]{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:13px}
 /* Paths are monospace because they are paths. Purpose is a sentence about the work, and
    setting a sentence in monospace makes it read as a value rather than as prose. */
 textarea{resize:vertical;min-height:62px;font-size:13.5px;line-height:1.55}
@@ -160,7 +149,7 @@ button:disabled{opacity:.38;cursor:not-allowed}
 .type-card .off-note{font-size:11.5px;color:var(--warn)}
 
 .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto;padding-top:4px}
-.chip{font:11px/1 ui-monospace,Consolas,monospace;border:1px solid var(--line);
+.chip{font:11px/1 "IBM Plex Mono",ui-monospace,Consolas,monospace;border:1px solid var(--line);
   border-radius:99px;padding:5px 8px;color:var(--muted);background:var(--panel);
   font-variant-numeric:tabular-nums}
 .chip.on{border-color:var(--accent);color:var(--accent)}
@@ -173,7 +162,7 @@ button:disabled{opacity:.38;cursor:not-allowed}
   gap:8px;margin:2px 0 12px}
 .count{background:var(--sunk);border:1px solid var(--line);border-radius:var(--r-sm);
   padding:8px 11px}
-.count b{display:block;font:600 15px/1.2 ui-monospace,Consolas,monospace;
+.count b{display:block;font:600 15px/1.2 "IBM Plex Mono",ui-monospace,Consolas,monospace;
   font-variant-numeric:tabular-nums}
 .count span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .tiers{display:flex;flex-direction:column;gap:7px}
@@ -193,11 +182,11 @@ button:disabled{opacity:.38;cursor:not-allowed}
 
 /* ------------------------------------------------------------------ plan */
 .planhead{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0 0}
-.pill{font:600 11.5px/1 ui-monospace,Consolas,monospace;border-radius:99px;padding:6px 10px;
+.pill{font:600 11.5px/1 "IBM Plex Mono",ui-monospace,Consolas,monospace;border-radius:99px;padding:6px 10px;
   border:1px solid var(--line);color:var(--ink-2);background:var(--sunk)}
 .pill.warn{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
 pre.out{background:var(--sunk);border:1px solid var(--line);border-radius:var(--r-sm);
-  padding:16px;overflow:auto;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;
+  padding:16px;overflow:auto;font:12px/1.6 "IBM Plex Mono",ui-monospace,Consolas,monospace;
   white-space:pre;margin:10px 0 0;max-height:430px;color:var(--ink-2)}
 /* The badge is pinned inside the scroll box, so the first line of the plan has to be given
    room for it. Without the extra padding it sat on top of the output it was describing. */
@@ -207,10 +196,10 @@ pre.out{background:var(--sunk);border:1px solid var(--line);border-radius:var(--
   border:1px solid var(--warn);border-radius:99px;padding:5px 9px}
 .msg{font-size:13px;margin:12px 0 0;color:var(--ink-2)}
 .msg.bad{color:var(--refuse)}
-.msg.good{color:var(--accent)}
+.msg.good{color:var(--ok)}
 .done{border:1px solid var(--accent);background:var(--accent-soft);border-radius:var(--r);
   padding:18px 20px;margin-top:16px}
-.done h3{margin:0 0 3px;font-size:17px;font-weight:640;display:flex;align-items:center;gap:9px}
+.done h3{margin:0 0 3px;font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:16px;font-weight:500;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
 
 @media (prefers-reduced-motion: reduce){
   *{transition:none !important;animation:none !important;scroll-behavior:auto !important}

@@ -10,6 +10,19 @@ last edit date.
 Print them. A tool that hands down a tier for a vault it has not counted is guessing, and the
 guess always runs in the direction of more structure.
 
+## Step 1b - count the work, not only the vault
+
+The vault is empty at setup. The work is not. Before tiering, ask **where the existing work
+already lives** and count that too: files, folders, total size, file types, the date range,
+and how deep it nests.
+
+A vault sized on an empty folder is sized on nothing. One was built from a 42-file inbox
+while the real corpus sat in a separate folder holding 2130 files and 6.8 GB, which nobody
+mentioned because nobody asked.
+
+Report the corpus counts beside the vault counts. If the corpus is large, say plainly that
+absorbing it is its own job with its own plan, and do not fold it into setup.
+
 ## Step 2 - name the honest tier
 
 | Counted | Honest tier | Why |
@@ -58,6 +71,29 @@ tier on the strength of an answer they declined to give.
 | `governance_tier` | archetypes with more than one | which system files exist and which assertions run |
 | `classes` | project | which card classes to declare. Drop any with no work in them |
 | `partition` | project | short codes for the top-level split of the domain, or blank |
+| `holder` | role | who holds it. Seeds `people/` and separates their work from a predecessor's |
+| `succession` | role | first holder or successor. Changes the first move, see below |
+| `corpus` | role | where the existing work already lives, so Step 1b can count it |
+
+## Step 5b - what a successor answer changes
+
+`succession = successor` is not a detail to store. It changes what the vault does first.
+
+- **Seed `people/` with both**, the holder and the predecessor, before any card is written.
+  The predecessor's note records what still points at them: the addresses on forms, the
+  names on plans, the contacts on documents that go outside. That list is the handover.
+- **The first artefact is a handover, not an obligation register.** Offer it in place of the
+  archetype default and say why: a register reconstructed from someone else's practice
+  cannot be confirmed against a charter nobody has produced yet.
+- **Every obligation read from the archive records whose practice it was.** A duty the
+  predecessor chose to run is not thereby a duty the role owes, and only the constitutive
+  documents separate the two. Say so on the card at the time, not afterwards.
+- **Check `charter/` early and say plainly if it is empty.** For a successor it usually is,
+  and every card written before anyone notices carries weaker provenance than it looks.
+
+`unknown` is answered by looking: read the plans and the documents in the corpus for a name
+against the activities. If a name other than the holder's appears throughout, the answer is
+`successor` whatever the user first said.
 
 ## Step 6 - show the plan, then apply
 
