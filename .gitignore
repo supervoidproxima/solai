@@ -18,3 +18,9 @@ plugins/SMP/
 # The setup surface writes a run log beside itself, carrying a loopback key and the
 # absolute path of the machine that ran it. Machine-local, and this repository is public.
 server.log
+
+# Obsidian's own folder, if the repository is opened as a vault. `workspace.json`
+# records which files were open and how the panes were arranged on one machine,
+# and this repository is public. Editing the docs in Obsidian is fine; publishing
+# the editor's state is not.
+.obsidian/
