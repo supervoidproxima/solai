@@ -118,7 +118,11 @@ function Have([string] $Command) {
 Write-Stage 'preflight'
 
 # A machine can carry several OneDrive roots (personal plus one per work tenant), and the
-# environment variable names only one of them. Prefer whichever root actually holds the vaults.
+# environment variable names only one of them. More than one root can hold an 'Obsidian Vaults'
+# folder too, so taking the first match is not enough: on a machine whose personal OneDrive holds
+# a few leftover vaults and whose work tenant holds every real one, first-match pointed the guided
+# page at the wrong root. Rank instead - a root that already holds a solai place wins, then the
+# root with the most vaults in it, and the discovery order breaks any remaining tie.
 $oneDriveRoots = @(Get-ChildItem $env:USERPROFILE -Directory -Filter 'OneDrive*' -ErrorAction SilentlyContinue |
                    Select-Object -ExpandProperty FullName)
 foreach ($e in @($env:OneDriveCommercial, $env:OneDrive)) {
@@ -126,11 +130,22 @@ foreach ($e in @($env:OneDriveCommercial, $env:OneDrive)) {
 }
 $vaultRoot = $null
 $onedrive  = $null
-foreach ($root in $oneDriveRoots) {
+$ranked    = @()
+for ($i = 0; $i -lt $oneDriveRoots.Count; $i++) {
+  $root      = $oneDriveRoots[$i]
   $candidate = Join-Path $root 'Obsidian Vaults'
-  if (Test-Path $candidate) { $vaultRoot = $candidate; $onedrive = $root; break }
+  if (-not (Test-Path $candidate)) { continue }
+  $vaults = @(Get-ChildItem $candidate -Directory -ErrorAction SilentlyContinue)
+  $places = @($vaults | Where-Object { Test-Path (Join-Path $_.FullName '_system/os/answers.toml') })
+  $ranked += [pscustomobject]@{ Root = $root; Vaults = $candidate; Places = $places.Count; Count = $vaults.Count; Order = $i }
 }
-if (-not $onedrive -and $oneDriveRoots.Count -gt 0) {
+if ($ranked.Count -gt 0) {
+  $best = @($ranked | Sort-Object @{ Expression = 'Places'; Descending = $true },
+                                  @{ Expression = 'Count';  Descending = $true },
+                                  @{ Expression = 'Order';  Descending = $false })[0]
+  $onedrive  = $best.Root
+  $vaultRoot = $best.Vaults
+} elseif ($oneDriveRoots.Count -gt 0) {
   $onedrive  = $oneDriveRoots[0]
   $vaultRoot = Join-Path $onedrive 'Obsidian Vaults'
 }
