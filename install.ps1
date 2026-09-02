@@ -180,8 +180,41 @@ foreach ($candidate in @(@('python', @('-c', "import sys;print('%d.%d' % sys.ver
 }
 $pyOk = [bool]($pyVersion -and ([version]$pyVersion -ge [version]'3.11'))
 
+# winget ships with App Installer, so a machine can have it installed and unreachable at the same
+# time: the Store alias folder is not always on PATH, and the run used to stop and tell the reader
+# to install something they already had. Look for it where it actually lives, then put its folder
+# on PATH for this session and for the user permanently.
+$wingetNote = $null
+$wingetDir  = $null
+if (-not (Have 'winget')) {
+  $aliasDir   = Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft') 'WindowsApps'
+  $candidates = @(Join-Path $aliasDir 'winget.exe')
+  try {
+    foreach ($a in @(Get-AppxPackage -Name 'Microsoft.DesktopAppInstaller' -ErrorAction SilentlyContinue)) {
+      if ($a.InstallLocation) { $candidates += (Join-Path $a.InstallLocation 'winget.exe') }
+    }
+  } catch { }
+  foreach ($c in $candidates) {
+    if ((-not $wingetDir) -and (Test-Path $c)) { $wingetDir = Split-Path $c -Parent }
+  }
+  if ($wingetDir) {
+    if (($env:PATH -split ';') -notcontains $wingetDir) { $env:PATH = $env:PATH.TrimEnd(';') + ';' + $wingetDir }
+    $userPath = [string] [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if (($userPath -split ';') -notcontains $wingetDir) {
+      if ($DryRun) {
+        $wingetNote = "would put winget on your PATH: $wingetDir"
+      } else {
+        [Environment]::SetEnvironmentVariable('PATH', ($userPath.TrimEnd(';') + ';' + $wingetDir).TrimStart(';'), 'User')
+        $wingetNote = "winget was installed but not on PATH: added $wingetDir"
+      }
+    } else {
+      $wingetNote = "winget found at $wingetDir, this session picks it up"
+    }
+  }
+}
+
 $present = [ordered]@{
-  'winget'      = (Have 'winget')
+  'winget'      = ((Have 'winget') -or ($null -ne $wingetDir))
   'git'         = (Have 'git')
   'python 3.11+'= $pyOk
   'gh'          = (Have 'gh')
@@ -198,9 +231,10 @@ if ($pyVersion) {
 } elseif (Have 'python') {
   Say 'action' 'python is on PATH but does not answer: the Microsoft Store alias, not an interpreter'
 }
+if ($wingetNote) { Say 'ok' $wingetNote }
 
 if (-not $present['winget']) {
-  Say 'failed' 'winget is required and is not on PATH. Install App Installer from the Microsoft Store, then run this again.'
+  Say 'failed' 'winget is required and was not found. Install App Installer from the Microsoft Store, or turn its app-execution alias back on in Settings, then run this again.'
   return
 }
 
