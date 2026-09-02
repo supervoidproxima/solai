@@ -60,12 +60,19 @@ $script:NativeExit = 0
 function Invoke-Native {
   param(
     [Parameter(Mandatory)] [string] $Exe,
-    [Parameter(ValueFromRemainingArguments = $true)] [string[]] $Arguments
+    [Parameter(ValueFromRemainingArguments = $true)] [object[]] $Arguments
   )
+  # A caller that hands over a prepared argument list - `Invoke-Native 'git' @($helper + @('fetch'))`
+  # - is building an array, not splatting one, so the whole list arrives as a single element and
+  # collapses into one space-joined token on the command line. Flatten it here instead of asking
+  # every call site to remember which form it used.
+  $argv = @()
+  foreach ($a in $Arguments) { $argv += @($a) }
+  $argv = [string[]] @($argv | Where-Object { $null -ne $_ })
   $saved = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   try {
-    $out = & $Exe @Arguments 2>&1
+    $out = & $Exe @argv 2>&1
     $script:NativeExit = $LASTEXITCODE
   } catch {
     $out = $_.Exception.Message
@@ -382,7 +389,11 @@ if ($NoHandoff) {
   if ($vaultRoot) { & $pyExe $serve --vaults $vaultRoot }
   else { & $pyExe $serve }
 } else {
-  Need 'start the guided page by hand: py <package>\skills\solai-scaffold\serve.py'
+  if (Test-Path $serve) {
+    Need ("start the guided page by hand: py `"{0}`"" -f $serve)
+  } else {
+    Need 'the guided page was not found in the installed package: reinstall the plugin, then run serve.py by hand'
+  }
 }
 
 # --------------------------------------------------------------------------- summary
