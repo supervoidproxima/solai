@@ -811,6 +811,10 @@ function finished(data) {
         const {data} = await api('/api/start', {});
         const said = data.error || data.note;
         if (said) $('#done').append(el('p', {class: 'msg' + (data.error ? ' bad' : '')}, said));
+        // The surface stops itself when it was started with --once, so the page says so
+        // rather than leaving buttons that now answer nothing.
+        if (data.stopped) $('#done').append(el('p', {class: 'msg'},
+          'The session has it from here. This page has stopped serving; close the tab.'));
       }}, 'Start a session here'),
     ])
   ]));

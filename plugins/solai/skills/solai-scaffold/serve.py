@@ -5,7 +5,7 @@ One name for the whole thing: Solai is the engine, the command and this page. It
 «just so» in Kazakh - what you call the answer when what was declared and what was built
 turn out to be the same, which is what every gate here spends its run establishing.
 
-    py serve.py [--port 0] [--vaults "<folder new vaults go under>"] [--no-browser]
+    py serve.py [--port 0] [--vaults "<folder new vaults go under>"] [--no-browser] [--once]
 
 Why a server and not a page. A file opened from disk cannot create a directory, and a page
 published to the web cannot touch this machine at all. The only honest way for a button
@@ -496,6 +496,9 @@ class Handler(BaseHTTPRequestHandler):
     key = ''
     base = ''
     gate = PlanGate()
+    # Set by --once: the surface exists to get one session started, and holding a server, a
+    # terminal and a browser tab open behind that session is three things to close by hand.
+    once = False
 
     def log_message(self, fmt, *args):                              # quieter than the default
         sys.stderr.write('  %s\n' % (fmt % args))
@@ -591,6 +594,14 @@ class Handler(BaseHTTPRequestHandler):
             answer = {'started': True, 'root': here, 'obsidian': ready}
             if note:
                 answer['note'] = note
+            if Handler.once:
+                # Shut down after this reply rather than during it, so the page is told what
+                # happened by the process that is about to stop rather than by a dropped
+                # connection it would have to guess about.
+                answer['stopped'] = True
+                server = getattr(self, 'server', None)
+                if server is not None:
+                    threading.Timer(0.5, server.shutdown).start()
             return 200, answer
 
         if route == '/api/obsidian':
@@ -673,11 +684,12 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
 
-def serve(port=0, open_browser=True, base=''):
+def serve(port=0, open_browser=True, base='', once=False):
     key = hashlib.sha256(os.urandom(32)).hexdigest()[:20]
     Handler.key = key
     Handler.base = default_base(base)
     Handler.gate = PlanGate()
+    Handler.once = once
     # Threading, because one request can now be a dialog waiting on a person. On a single
     # thread that dialog would hold the only one answering the page, and the page would
     # look dead while the window it opened sat in front of the operator.
@@ -686,11 +698,15 @@ def serve(port=0, open_browser=True, base=''):
     print('Solai   setup surface %s' % VERSION)
     print('  %s' % url)
     print('  new vaults suggested under %s' % Handler.base)
-    print('  loopback only, one key per process. Ctrl-C to stop.')
+    if once:
+        print('  stops once a session starts, so this terminal is not held open. Ctrl-C also stops.')
+    else:
+        print('  loopback only, one key per process. Ctrl-C to stop.')
     if open_browser:
         threading.Timer(0.4, webbrowser.open, args=(url,)).start()
     try:
         httpd.serve_forever()
+        print('  the session has it from here. Surface stopped.')
     except KeyboardInterrupt:
         print('\n  stopped.')
     return 0
@@ -704,7 +720,8 @@ def main():
         port = int(argv[argv.index('--port') + 1])
     if '--vaults' in argv:
         base = argv[argv.index('--vaults') + 1]
-    return serve(port=port, open_browser='--no-browser' not in argv, base=base)
+    return serve(port=port, open_browser='--no-browser' not in argv, base=base,
+                 once='--once' in argv)
 
 
 if __name__ == '__main__':

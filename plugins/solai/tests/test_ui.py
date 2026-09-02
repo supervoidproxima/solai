@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""34 assertions on the setup surface: what it asks, what it offers, what it forwards,
+"""35 assertions on the setup surface: what it asks, what it offers, what it forwards,
 and the plan gate.
 
 The surface is the one part of the package a person drives with a mouse, and a mouse cannot
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(PKG, 'skills', 'solai-scaffold'))
 from lib import decl                                                # noqa: E402
 import serve as UI                                                  # noqa: E402
 
-EXPECTED = 53
+EXPECTED = 54
 NAME = 'ui'
 
 ANS = {'name': 'T', 'remit': 'A fixture remit', 'output_language': 'en'}
@@ -266,6 +266,20 @@ def group_obsidian(s):
     s.ok('UI-53', 'with the app open an unlisted folder is refused, and the folder is named',
          (not refused) and other in (said or '') and UI.obsidian_id(other, closed) is None,
          said)
+
+    seen = {}
+    real, argv = UI.serve, sys.argv
+    try:
+        UI.serve = lambda **kw: seen.update(kw) or 0
+        sys.argv = ['serve.py']
+        UI.main()
+        plain = seen.get('once')
+        sys.argv = ['serve.py', '--once']
+        UI.main()
+    finally:
+        UI.serve, sys.argv = real, argv
+    s.ok('UI-54', 'the surface stops after one session only when it was asked to',
+         plain is False and seen.get('once') is True, repr(seen))
 
 
 GROUPS = (group_declarations, group_gate, group_argv, group_tier, group_page,

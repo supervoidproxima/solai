@@ -435,8 +435,10 @@ if ($NoHandoff) {
 } elseif ((Test-Path $serve) -and $pyExe) {
   Say 'ok' 'opening the guided page. Close it with Ctrl+C when you are done.'
   # Not through Invoke-Native: this one is meant to stay in the foreground and print as it goes.
-  if ($vaultRoot) { & $pyExe $serve --vaults $vaultRoot }
-  else { & $pyExe $serve }
+  # --once: the page stops itself once a session is started, so this terminal is handed back
+  # instead of being held open by a server behind the window the reader is now working in.
+  if ($vaultRoot) { & $pyExe $serve --vaults $vaultRoot --once }
+  else { & $pyExe $serve --once }
 } else {
   if (Test-Path $serve) {
     Need ("start the guided page by hand: py `"{0}`"" -f $serve)
