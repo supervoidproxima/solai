@@ -367,6 +367,31 @@ def open_obsidian(root):
     return uri
 
 
+def obsidian_ready(root, registry=None, running=None):
+    """Whether the app can be asked to open this folder, and what to say when it cannot.
+
+    One answer for both buttons, because the question is the same one twice: a vault the app
+    already lists is ready; an unlisted folder is registered first; and an unlisted folder
+    behind a running instance is refused, because the app rewrites that list from memory when
+    it closes and would drop the entry, and a URI it does not know puts a dialog in front of
+    the person instead of a window.
+    """
+    if obsidian_id(root, registry):
+        return True, None
+    if running is None:
+        running = obsidian_running()
+    if running:
+        return False, ('Obsidian is open, and it rewrites its vault list when it closes, so '
+                       'this did not touch the list. In Obsidian: Open folder as vault, and '
+                       'pick %s. After that it opens on its own.' % os.path.abspath(root))
+    try:
+        obsidian_register(root, registry)
+    except OSError as err:
+        return False, ('the vault list could not be written (%s). In Obsidian: Open folder as '
+                       'vault, and pick %s.' % (err, os.path.abspath(root)))
+    return True, None
+
+
 # The first thing said in a new vault. A terminal opened at a blank prompt asks the person
 # to know what to type, which is the one thing they cannot know a minute after pressing
 # create. It orients and stops: nothing is written until they say so.
@@ -377,7 +402,7 @@ FIRST_PROMPT = (
 )
 
 
-def start_argv(root, prompt=FIRST_PROMPT):
+def start_argv(root, prompt=FIRST_PROMPT, obsidian=False):
     """The command that opens a session in a vault, as a list rather than a string.
 
     PowerShell because that is the shell on this machine, `-NoExit` so the window survives
@@ -385,11 +410,19 @@ def start_argv(root, prompt=FIRST_PROMPT):
     Cyrillic and the occasional bracket, and `cd` with a bare path eventually meets one it
     reads as a pattern. The prompt is passed to `claude` as its opening message, so the
     session starts with something on the screen rather than a cursor.
+
+    `obsidian` puts the app in front of the terminal, first in the line so the vault is on
+    screen while the session is still starting. The caller decides, because whether the URI
+    can work is a fact about Obsidian's vault list rather than about this command, and a
+    Start-Process for a vault the app does not list would raise a dialog instead of a window.
     """
     root = os.path.abspath(root)
-    return ['powershell', '-NoExit', '-NoLogo', '-Command',
-            'Set-Location -LiteralPath %s; claude %s'
-            % (_ps_quote(root), _ps_quote(prompt))]
+    steps = []
+    if obsidian:
+        steps.append('Start-Process %s' % _ps_quote(obsidian_uri(root)))
+    steps.append('Set-Location -LiteralPath %s' % _ps_quote(root))
+    steps.append('claude %s' % _ps_quote(prompt))
+    return ['powershell', '-NoExit', '-NoLogo', '-Command', '; '.join(steps)]
 
 
 def _ps_quote(text):
@@ -551,9 +584,14 @@ class Handler(BaseHTTPRequestHandler):
             here = os.path.abspath(root)
             if not fsplan.exists(here):
                 return 400, {'error': 'no such folder: %s' % here}
+            ready, note = obsidian_ready(here)
             flags = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0)
-            subprocess.Popen(start_argv(here), creationflags=flags, close_fds=True)
-            return 200, {'started': True, 'root': here}
+            subprocess.Popen(start_argv(here, obsidian=ready), creationflags=flags,
+                             close_fds=True)
+            answer = {'started': True, 'root': here, 'obsidian': ready}
+            if note:
+                answer['note'] = note
+            return 200, answer
 
         if route == '/api/obsidian':
             # A button of its own rather than a second thing the session button does, because
@@ -562,22 +600,11 @@ class Handler(BaseHTTPRequestHandler):
             here = os.path.abspath(root)
             if not fsplan.exists(here):
                 return 400, {'error': 'no such folder: %s' % here}
-            known = obsidian_id(here)
-            if not known and obsidian_running():
-                return 200, {'opened': False, 'note':
-                             'Obsidian is open, and it rewrites its vault list when it closes, '
-                             'so this did not touch the list. In Obsidian: Open folder as '
-                             'vault, and pick %s. This button opens it after that.' % here}
-            added = False
-            if not known:
-                try:
-                    _, added = obsidian_register(here)
-                except OSError as err:
-                    return 200, {'opened': False, 'note':
-                                 'the vault list could not be written (%s). In Obsidian: Open '
-                                 'folder as vault, and pick %s.' % (err, here)}
+            ready, note = obsidian_ready(here)
+            if not ready:
+                return 200, {'opened': False, 'note': note}
             open_obsidian(here)
-            return 200, {'opened': True, 'registered': added, 'root': here}
+            return 200, {'opened': True, 'root': here}
 
         if route == '/api/pick':
             # The dialog belongs to this machine, not to the page: a browser hands a page

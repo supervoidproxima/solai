@@ -809,7 +809,8 @@ function finished(data) {
       }}, 'Open in Obsidian'),
       el('button', {type: 'button', class: 'primary', onclick: async () => {
         const {data} = await api('/api/start', {});
-        if (data.error) $('#done').append(el('p', {class: 'msg bad'}, data.error));
+        const said = data.error || data.note;
+        if (said) $('#done').append(el('p', {class: 'msg' + (data.error ? ' bad' : '')}, said));
       }}, 'Start a session here'),
     ])
   ]));

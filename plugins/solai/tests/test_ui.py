@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""30 assertions on the setup surface: what it asks, what it offers, what it forwards,
+"""34 assertions on the setup surface: what it asks, what it offers, what it forwards,
 and the plan gate.
 
 The surface is the one part of the package a person drives with a mouse, and a mouse cannot
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(PKG, 'skills', 'solai-scaffold'))
 from lib import decl                                                # noqa: E402
 import serve as UI                                                  # noqa: E402
 
-EXPECTED = 49
+EXPECTED = 53
 NAME = 'ui'
 
 ANS = {'name': 'T', 'remit': 'A fixture remit', 'output_language': 'en'}
@@ -246,6 +246,26 @@ def group_obsidian(s):
     uri = UI.obsidian_uri('C:/Obsidian Vaults/a place')
     s.ok('UI-49', 'the path reaches the app as one encoded parameter, spaces and all',
          uri.startswith('obsidian://open?path=') and ' ' not in uri and '%20' in uri, uri)
+
+    with_app = UI.start_argv('C:/vaults/place', obsidian=True)[-1]
+    s.ok('UI-50', 'the session command shows the vault before it starts the session',
+         with_app.index('Start-Process') < with_app.index('Set-Location') < with_app.index('claude ')
+         and 'obsidian://open?path=' in with_app, with_app)
+
+    s.ok('UI-51', 'a vault the app cannot open leaves the session command alone',
+         'Start-Process' not in UI.start_argv('C:/vaults/place')[-1])
+
+    closed = os.path.join(tempfile.mkdtemp(), 'obsidian.json')
+    place = tempfile.mkdtemp()
+    ready, note = UI.obsidian_ready(place, closed, running=False)
+    s.ok('UI-52', 'with the app closed an unlisted folder is registered, then ready',
+         ready and note is None and UI.obsidian_id(place, closed) is not None)
+
+    other = tempfile.mkdtemp()
+    refused, said = UI.obsidian_ready(other, closed, running=True)
+    s.ok('UI-53', 'with the app open an unlisted folder is refused, and the folder is named',
+         (not refused) and other in (said or '') and UI.obsidian_id(other, closed) is None,
+         said)
 
 
 GROUPS = (group_declarations, group_gate, group_argv, group_tier, group_page,
