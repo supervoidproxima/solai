@@ -24,6 +24,11 @@
 .PARAMETER NoHandoff
   Run every stage but do not open the guided page at the end.
 
+.PARAMETER CloseWhenDone
+  Close this window after the summary, but only when the summary has nothing in it for you to
+  do. A run that ends with a list stays on screen: closing a window over the one thing the
+  reader still has to act on would be worse than leaving it open.
+
 .PARAMETER ConfigRepo
   The private configuration repository, as owner/name. Default: the constant below.
 
@@ -39,6 +44,7 @@ param(
   [switch] $SkipApps,
   [switch] $PublicOnly,
   [switch] $NoHandoff,
+  [switch] $CloseWhenDone,
   [string] $PackageRepo = 'supervoidproxima/solai',
   [string] $ConfigRepo  = 'supervoidproxima/claude-config'
 )
@@ -241,6 +247,9 @@ if (-not $present['winget']) {
 if ($DryRun) {
   Write-Host ''
   Write-Host '      dry run: stages 1 to 8 would run as listed above. Nothing was written.' -ForegroundColor DarkGray
+  if ($CloseWhenDone) {
+    Write-Host '      would close this window afterwards, unless the summary had a list in it.' -ForegroundColor DarkGray
+  }
   return
 }
 
@@ -456,3 +465,16 @@ if ($script:Todo.Count -eq 0) {
   foreach ($t in $script:Todo) { Write-Host ("  - " + $t) -ForegroundColor Yellow }
 }
 Write-Host ''
+
+# The window this ran in has nothing left to hold: the session opened in a console of its own
+# and the page stopped itself. Closing it is Stop-Process on this host rather than `exit`,
+# which under `irm | iex` ends the piped script and leaves the prompt sitting there.
+if ($CloseWhenDone) {
+  if ($script:Todo.Count -gt 0) {
+    Write-Host '  this window stays open: the list above is for you.' -ForegroundColor Yellow
+  } else {
+    Write-Host '  closing this window.' -ForegroundColor DarkGray
+    Start-Sleep -Seconds 2
+    Stop-Process -Id $PID
+  }
+}
