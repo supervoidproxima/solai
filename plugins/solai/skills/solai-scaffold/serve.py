@@ -29,6 +29,8 @@ import os
 import subprocess
 import sys
 import threading
+import time
+import urllib.parse
 import webbrowser
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -262,6 +264,109 @@ def material_paths(materials):
     return [p.strip() for p in (materials or '').splitlines() if p.strip()]
 
 
+# ------------------------------------------------------------------------------- Obsidian
+
+# Obsidian keeps its vault list in one file, %APPDATA%\obsidian\obsidian.json, and offers no
+# command that adds to it: the obsidian:// URI opens a vault the app already knows and does
+# nothing for a folder it does not, and the desktop binary takes a URI rather than a path. So
+# opening a vault that was created a minute ago means writing the entry the app would have
+# written, then asking the app to open it.
+REGISTRY = os.path.join(os.environ.get('APPDATA') or os.path.expanduser('~'),
+                        'obsidian', 'obsidian.json')
+
+
+def obsidian_vaults(registry=None):
+    """The vault list as {id: entry}. A missing file, an unreadable one and one holding some
+    other shape all mean the same thing here - Obsidian has nothing to say about this machine
+    yet - so they answer alike rather than raising."""
+    try:
+        with open(registry or REGISTRY, 'r', encoding='utf-8') as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    vaults = data.get('vaults') if isinstance(data, dict) else None
+    return vaults if isinstance(vaults, dict) else {}
+
+
+def obsidian_id(root, registry=None):
+    """The id Obsidian already holds for this folder, or None. Compared the way the filesystem
+    compares - case folded, separators normalised - because the registry holds whatever was
+    typed the day the vault was added, and a OneDrive path gets retyped."""
+    want = os.path.normcase(os.path.normpath(os.path.abspath(root)))
+    for vid, entry in obsidian_vaults(registry).items():
+        have = entry.get('path') if isinstance(entry, dict) else None
+        if have and os.path.normcase(os.path.normpath(os.path.abspath(have))) == want:
+            return vid
+    return None
+
+
+def obsidian_running():
+    """Whether the app is up, because it rewrites its vault list from memory when it closes.
+    An entry added behind a running instance is an entry that may be thrown away an hour
+    later, and a button that loses its work quietly is worse than one that says it cannot."""
+    try:
+        out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq Obsidian.exe', '/NH'],
+                             capture_output=True, text=True,
+                             encoding='utf-8', errors='replace').stdout
+    except OSError:
+        return False
+    return 'Obsidian.exe' in (out or '')
+
+
+def obsidian_register(root, registry=None):
+    """Add the folder to the vault list once. Returns (id, added), where added is false when
+    the folder was already listed, so a second press is not a second entry for one vault.
+
+    Written beside itself and moved into place: a failure halfway leaves the list Obsidian had
+    rather than half a list, which is the one outcome this cannot risk."""
+    path = registry or REGISTRY
+    known = obsidian_id(root, path)
+    if known:
+        return known, False
+    try:
+        with open(path, 'r', encoding='utf-8') as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    vaults = data.get('vaults')
+    if not isinstance(vaults, dict):
+        vaults = {}
+        data['vaults'] = vaults
+    vid = os.urandom(8).hex()
+    while vid in vaults:
+        vid = os.urandom(8).hex()
+    vaults[vid] = {'path': os.path.abspath(root), 'ts': int(time.time() * 1000)}
+    folder = os.path.dirname(os.path.abspath(path))
+    if folder and not os.path.isdir(folder):
+        os.makedirs(folder)
+    temp = path + '.solai'
+    with open(temp, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    os.replace(temp, path)
+    return vid, True
+
+
+def obsidian_uri(root):
+    """Keyed on path rather than name: the name is whatever the folder is called, two vaults on
+    one machine can share it, and the path is what the registry is keyed on."""
+    return 'obsidian://open?path=' + urllib.parse.quote(os.path.abspath(root), safe='')
+
+
+def open_obsidian(root):
+    """Hand the URI to the machine and let it start or reuse the app. os.startfile is the
+    Windows way and takes no shell; the fallback keeps this module importable, and testable,
+    where that call does not exist."""
+    uri = obsidian_uri(root)
+    starter = getattr(os, 'startfile', None)
+    if starter:
+        starter(uri)
+    else:
+        subprocess.Popen(['cmd', '/c', 'start', '', uri], close_fds=True)
+    return uri
+
+
 # The first thing said in a new vault. A terminal opened at a blank prompt asks the person
 # to know what to type, which is the one thing they cannot know a minute after pressing
 # create. It orients and stops: nothing is written until they say so.
@@ -449,6 +554,30 @@ class Handler(BaseHTTPRequestHandler):
             flags = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0)
             subprocess.Popen(start_argv(here), creationflags=flags, close_fds=True)
             return 200, {'started': True, 'root': here}
+
+        if route == '/api/obsidian':
+            # A button of its own rather than a second thing the session button does, because
+            # these two fail apart: Obsidian can be absent or mid-update while the terminal is
+            # fine, and one press losing both would be this surface's fault, not the machine's.
+            here = os.path.abspath(root)
+            if not fsplan.exists(here):
+                return 400, {'error': 'no such folder: %s' % here}
+            known = obsidian_id(here)
+            if not known and obsidian_running():
+                return 200, {'opened': False, 'note':
+                             'Obsidian is open, and it rewrites its vault list when it closes, '
+                             'so this did not touch the list. In Obsidian: Open folder as '
+                             'vault, and pick %s. This button opens it after that.' % here}
+            added = False
+            if not known:
+                try:
+                    _, added = obsidian_register(here)
+                except OSError as err:
+                    return 200, {'opened': False, 'note':
+                                 'the vault list could not be written (%s). In Obsidian: Open '
+                                 'folder as vault, and pick %s.' % (err, here)}
+            open_obsidian(here)
+            return 200, {'opened': True, 'registered': added, 'root': here}
 
         if route == '/api/pick':
             # The dialog belongs to this machine, not to the page: a browser hands a page

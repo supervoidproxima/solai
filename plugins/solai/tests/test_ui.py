@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""26 assertions on the setup surface: what it asks, what it offers, what it forwards,
+"""30 assertions on the setup surface: what it asks, what it offers, what it forwards,
 and the plan gate.
 
 The surface is the one part of the package a person drives with a mouse, and a mouse cannot
@@ -15,6 +15,7 @@ controls, and a statement that quietly reached the command line would be a contr
 could see, and `UI-24` guards the types: this surface offers `role` today, and the ones it
 does not offer are shown disabled with the reason rather than dropped from the page.
 """
+import json
 import os
 import sys
 import tempfile
@@ -26,7 +27,7 @@ sys.path.insert(0, os.path.join(PKG, 'skills', 'solai-scaffold'))
 from lib import decl                                                # noqa: E402
 import serve as UI                                                  # noqa: E402
 
-EXPECTED = 45
+EXPECTED = 49
 NAME = 'ui'
 
 ANS = {'name': 'T', 'remit': 'A fixture remit', 'output_language': 'en'}
@@ -214,4 +215,38 @@ def group_page(s):
          repr(with_mats))
 
 
-GROUPS = (group_declarations, group_gate, group_argv, group_tier, group_page)
+def group_obsidian(s):
+    """Opening the vault in the app. Obsidian registers vaults in a file and has no command
+    that adds to it, so this is the one place the surface writes outside a vault, and these
+    four assertions are what keep that write honest: it matches an existing entry before
+    adding, it adds one entry rather than one per press, and the URI survives a path with
+    spaces in it."""
+    listed = os.path.join(tempfile.mkdtemp(), 'obsidian.json')
+    vault = tempfile.mkdtemp()
+    with open(listed, 'w', encoding='utf-8') as fh:
+        json.dump({'vaults': {'a1b2c3d4e5f60718': {'path': vault, 'ts': 1}}}, fh)
+
+    typed = vault.replace(os.sep, '/').upper()
+    s.ok('UI-46', 'a folder already listed is matched however its path was typed',
+         UI.obsidian_id(typed, listed) == 'a1b2c3d4e5f60718', typed)
+
+    fresh = os.path.join(tempfile.mkdtemp(), 'obsidian.json')
+    new_vault = tempfile.mkdtemp()
+    vid, added = UI.obsidian_register(new_vault, fresh)
+    entry = UI.obsidian_vaults(fresh).get(vid) or {}
+    s.ok('UI-47', 'registering writes one entry: a 16-hex id, the absolute path, a timestamp',
+         added and len(vid) == 16 and int(vid, 16) >= 0
+         and entry.get('path') == os.path.abspath(new_vault) and entry.get('ts', 0) > 0,
+         repr(entry))
+
+    again, added_twice = UI.obsidian_register(new_vault, fresh)
+    s.ok('UI-48', 'a second press is not a second entry for one vault',
+         again == vid and not added_twice and len(UI.obsidian_vaults(fresh)) == 1)
+
+    uri = UI.obsidian_uri('C:/Obsidian Vaults/a place')
+    s.ok('UI-49', 'the path reaches the app as one encoded parameter, spaces and all',
+         uri.startswith('obsidian://open?path=') and ' ' not in uri and '%20' in uri, uri)
+
+
+GROUPS = (group_declarations, group_gate, group_argv, group_tier, group_page,
+          group_obsidian)

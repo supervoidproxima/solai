@@ -802,6 +802,11 @@ function finished(data) {
       el('button', {type: 'button', onclick: () => window.open(
         '/dashboard?key=' + DATA.key + '&root=' + encodeURIComponent(root), '_blank')},
         'Open dashboard'),
+      el('button', {type: 'button', onclick: async () => {
+        const {data} = await api('/api/obsidian', {});
+        const said = data.error || data.note;
+        if (said) $('#done').append(el('p', {class: 'msg' + (data.error ? ' bad' : '')}, said));
+      }}, 'Open in Obsidian'),
       el('button', {type: 'button', class: 'primary', onclick: async () => {
         const {data} = await api('/api/start', {});
         if (data.error) $('#done').append(el('p', {class: 'msg bad'}, data.error));
