@@ -47,6 +47,17 @@ SCAFFOLD = os.path.join(HERE, 'scaffold.py')
 PICK = os.path.join(HERE, 'pick.py')
 UI = os.path.join(HERE, 'ui.html')
 
+# The browser asks for /favicon.ico whether or not anything serves one, and a 404 in the log of
+# a five-minute setup process reads like a fault when it is a tab icon. Serve the mark instead:
+# the page links to this route, so the icon and the log line have one source.
+FAVICON = (
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+    "<rect width='32' height='32' rx='7' fill='#14161a'/>"
+    "<circle cx='16' cy='13' r='5.5' fill='#e0b46c'/>"
+    "<path d='M16 20v6' stroke='#e0b46c' stroke-width='3' stroke-linecap='round'/>"
+    "</svg>"
+)
+
 # The tier table of `skills/solai/interview.md`, in the one form a page can render. Kept as
 # data rather than prose because the page has to grey out what the counts do not support,
 # and a rule that is only prose cannot grey anything out.
@@ -377,6 +388,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         route = self.path.split('?')[0]
+        if route == '/favicon.ico':
+            # No key: it is a tab icon, the same bytes for anyone who can reach the loopback
+            # port, and gating it would only turn the 404 into a 403.
+            return self._send(200, FAVICON, 'image/svg+xml; charset=utf-8')
         if route == '/dashboard':
             # Chrome refuses to follow a file:// link from an http:// page, silently, which is
             # why the button did nothing. The dashboard is a file on this machine and this is
