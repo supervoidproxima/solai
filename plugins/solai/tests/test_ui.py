@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""35 assertions on the setup surface: what it asks, what it offers, what it forwards,
+"""36 assertions on the setup surface: what it asks, what it offers, what it forwards,
 and the plan gate.
 
 The surface is the one part of the package a person drives with a mouse, and a mouse cannot
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(PKG, 'skills', 'solai-scaffold'))
 from lib import decl                                                # noqa: E402
 import serve as UI                                                  # noqa: E402
 
-EXPECTED = 54
+EXPECTED = 55
 NAME = 'ui'
 
 ANS = {'name': 'T', 'remit': 'A fixture remit', 'output_language': 'en'}
@@ -160,12 +160,18 @@ def group_page(s):
     page = UI.render_page(PKG, key='k')
     s.ok('UI-41', 'the rail has one entry per step, numbered in order, and each has a section',
          all(('data-step="%d"' % n) in page and ('id="s%d"' % n) in page
-             for n in range(1, 7)) and 'data-step="7"' not in page,
+             for n in range(1, 10)) and 'data-step="10"' not in page,
          'renumbering the steps and forgetting the rail is the obvious way to break this')
 
     s.ok('UI-43', 'every rail step is reachable without a mouse',
-         all(('data-step="%d" tabindex="0" role="button"' % n) in page for n in range(1, 7)),
+         all(('data-step="%d" tabindex="0" role="button"' % n) in page for n in range(1, 10)),
          'the rail scrolls the page, so it is a control and has to answer a keyboard')
+
+    s.ok('UI-55', 'the answer the tier turns on is asked, not filled in behind the reader',
+         'id="f-artefact"' in page and 'first_artefact' in page
+         and page.index('id="f-artefact"') < page.index('id="f-tier"'),
+         'the surface shipped the archetype default as if a person had promised it, and the '
+         'engine can only tell them apart by what arrives')
 
     s.ok('UI-44', 'the types it does not build have a region of their own',
          'id="types-off"' in page and 'id="types-off-wrap"' in page

@@ -17,6 +17,22 @@
   --shadow:0 1px 2px rgba(0,0,0,.42), 0 14px 34px -18px rgba(0,0,0,.75);
   --r:6px; --r-sm:4px;
 }
+
+/* Both themes, one token set. The surface was drawn dark and stays dark by default; a
+   machine set to light gets a light one rather than a plate of black in a white desktop.
+   Only the tokens are redefined - no component reads a colour of its own - so the two
+   themes cannot drift apart. */
+@media (prefers-color-scheme: light){
+  :root{
+    color-scheme:light;
+    --bg:#faf9f5; --panel:#ffffff; --sunk:#f2f0e9; --ink:#1a1a17; --ink-2:#3d3c37;
+    --muted:#77766f; --line:#e2ded3; --line-2:#cdc8ba;
+    --accent:#8a6224; --accent-soft:#f6efe2; --accent-ink:#fffdf8;
+    --ok:#2f7d52; --ok-soft:#e8f4ec;
+    --warn:#9a5a12; --warn-soft:#fbf1e2; --refuse:#b3382c;
+    --shadow:0 1px 2px rgba(60,50,30,.10), 0 14px 34px -20px rgba(60,50,30,.28);
+  }
+}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);
@@ -224,10 +240,13 @@ pre.out{background:var(--sunk);border:1px solid var(--line);border-radius:var(--
   <ol class="steps" id="rail">
     <li data-step="1" tabindex="0" role="button"><span class="dot">1</span> Type</li>
     <li data-step="2" tabindex="0" role="button"><span class="dot">2</span> Name</li>
-    <li data-step="3" tabindex="0" role="button"><span class="dot">3</span> Location</li>
-    <li data-step="4" tabindex="0" role="button"><span class="dot">4</span> Materials</li>
-    <li data-step="5" tabindex="0" role="button"><span class="dot">5</span> Details</li>
-    <li data-step="6" tabindex="0" role="button"><span class="dot">6</span> Review</li>
+    <li data-step="3" tabindex="0" role="button"><span class="dot">3</span> Purpose</li>
+    <li data-step="4" tabindex="0" role="button"><span class="dot">4</span> Artefact</li>
+    <li data-step="5" tabindex="0" role="button"><span class="dot">5</span> Languages</li>
+    <li data-step="6" tabindex="0" role="button"><span class="dot">6</span> Folder</li>
+    <li data-step="7" tabindex="0" role="button"><span class="dot">7</span> Materials</li>
+    <li data-step="8" tabindex="0" role="button"><span class="dot">8</span> Tier</li>
+    <li data-step="9" tabindex="0" role="button"><span class="dot">9</span> Review</li>
   </ol>
 </aside>
 
@@ -251,7 +270,29 @@ pre.out{background:var(--sunk);border:1px solid var(--line);border-radius:var(--
   </section>
 
   <section class="step off" id="s3">
-    <h2>Choose where it lives.<span class="idx">3</span></h2>
+    <h2>Say what it is for.<span class="idx">3</span></h2>
+    <p class="lede">One line, in your words. It goes into CLAUDE.md, so the next session reads
+    it before anything else.</p>
+    <div id="f-purpose"></div>
+  </section>
+
+  <section class="step off" id="s4">
+    <h2>Name what it owes first.<span class="idx">4</span></h2>
+    <p class="lede">The first thing this place hands somebody. It is the denominator of every
+    ratio this vault reports about itself later, and naming it is one of the two things that
+    lift the tier.</p>
+    <div id="f-artefact"></div>
+  </section>
+
+  <section class="step off" id="s5">
+    <h2>Choose the languages.<span class="idx">5</span></h2>
+    <p class="lede">What you will write cards and notes in. A card is written in one of them,
+    whole: the language may change between cards and never inside one.</p>
+    <div id="f-langs"></div>
+  </section>
+
+  <section class="step off" id="s6">
+    <h2>Choose where it lives.<span class="idx">6</span></h2>
     <p class="lede">Choose the folder it goes in, or type the path. See what is already inside.</p>
     <div class="field">
       <label for="root">Folder</label>
@@ -265,8 +306,8 @@ pre.out{background:var(--sunk);border:1px solid var(--line);border-radius:var(--
     <div id="count-out"></div>
   </section>
 
-  <section class="step off" id="s4">
-    <h2>Add your materials.<span class="idx">4</span></h2>
+  <section class="step off" id="s7">
+    <h2>Add your materials.<span class="idx">7</span></h2>
     <p class="lede">Documents prepared for this vault. They are copied in, not read.</p>
     <div class="field">
       <label for="mats">Folder or file on this machine</label>
@@ -280,14 +321,16 @@ pre.out{background:var(--sunk);border:1px solid var(--line);border-radius:var(--
     <div id="mats-out"></div>
   </section>
 
-  <section class="step off" id="s5">
-    <h2>Add a few details.<span class="idx">5</span></h2>
-    <p class="lede">Only what this type needs. The rest is handled.</p>
-    <div id="fields"></div>
+  <section class="step off" id="s8">
+    <h2>Pick a tier.<span class="idx">8</span></h2>
+    <p class="lede">How much machinery this place carries. What you may pick is what the folder
+    check and the first artefact support; a tier you cannot hold is shown and refused, never
+    hidden.</p>
+    <div id="f-tier"></div>
   </section>
 
-  <section class="step off" id="s6">
-    <h2>Review, then create.<span class="idx">6</span></h2>
+  <section class="step off" id="s9">
+    <h2>Review, then create.<span class="idx">9</span></h2>
     <p class="lede">See every file before it is written. Nothing happens until you say so.</p>
     <div class="bar">
       <button id="btn-plan" type="button">Review</button>
@@ -338,21 +381,31 @@ const api = async (path, body) => {
 function railState() {
   const t = state.touched;
   const named = !!(state.answers.name || '').trim();
-  const detailKeys = ['remit', 'content_languages', 'filename_language', 'governance_tier'];
+  const langKeys = ['content_languages', 'filename_language'];
+  // Purpose and the first artefact arrive filled in from the type. A sentence nobody wrote
+  // is not an answer somebody gave, so they read `auto` until they are edited - the same
+  // rule the path and the materials already follow.
   return {
     1: state.type ? 'done' : 'todo',
     2: !named ? 'todo' : (t.has('name') ? 'done' : 'auto'),
-    3: (state.counts && state.counts.exists) ? (state.pathTouched ? 'done' : 'auto') : 'todo',
-    4: !materialsReady() ? 'todo' : (state.materials.path ? 'done' : 'auto'),
-    5: !answersReady() ? 'todo' : (detailKeys.some(k => t.has(k)) ? 'done' : 'auto'),
-    6: state.applied ? 'done' : (state.planned ? 'auto' : 'todo')
+    3: !String(state.answers.remit || '').trim() ? 'todo'
+       : (state.remitTouched ? 'done' : 'auto'),
+    4: !String(state.answers.first_artefact || '').trim() ? 'todo'
+       : (t.has('first_artefact') ? 'done' : 'auto'),
+    5: !state.type ? 'todo' : (langKeys.some(k => t.has(k)) ? 'done' : 'auto'),
+    6: (state.counts && state.counts.exists) ? (state.pathTouched ? 'done' : 'auto') : 'todo',
+    7: !materialsReady() ? 'todo' : (state.materials.path ? 'done' : 'auto'),
+    8: !(state.counts && state.counts.exists) ? 'todo'
+       : (t.has('governance_tier') ? 'done' : 'auto'),
+    9: state.applied ? 'done' : (state.planned ? 'auto' : 'todo')
   };
 }
 
 function paintRail() {
   const st = railState();
-  let current = 6;
-  for (const n of [1, 2, 3, 4, 5, 6]) if (st[n] === 'todo') { current = n; break; }
+  const all = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  let current = all[all.length - 1];
+  for (const n of all) if (st[n] === 'todo') { current = n; break; }
   for (const li of $('#rail').children) {
     const n = Number(li.dataset.step);
     // `auto` is only the truth about a step you have arrived at. Reported for one further
@@ -457,7 +510,10 @@ function pick(a) {
   // The opening line comes from the type until somebody writes their own. Same rule as the
   // path suggested from the name: offer, and never overwrite what a person typed.
   if (!state.remitTouched) state.answers.remit = (a.defaults && a.defaults.remit) || '';
-  state.answers.first_artefact = (a.defaults && a.defaults.first_artefact) || '';
+  if (!state.touched.has('first_artefact')) {
+    state.answers.first_artefact = (a.defaults && a.defaults.first_artefact) || '';
+  }
+  renderFields();
   for (const c of types.children) c.classList.toggle('sel', c.dataset.name === a.name);
   $('#s2').classList.remove('off');
   if (!$('#pname').value.trim()) { $('#pname').value = a.title; }
@@ -465,10 +521,10 @@ function pick(a) {
   $('#pname').focus();
 }
 
+// What a folder that has been counted opens: the materials it will copy, the tier that count
+// supports, and the review. Everything before it needs no path.
 function openRest(on) {
-  $('#s4').classList.toggle('off', !on);
-  $('#s5').classList.toggle('off', !on);
-  $('#s6').classList.toggle('off', !on);
+  for (const id of ['#s7', '#s8', '#s9']) $(id).classList.toggle('off', !on);
 }
 
 // No path is a complete answer: most vaults are made empty. A path that has not been checked
@@ -527,7 +583,8 @@ function nameChanged() {
   // edits it: a field that keeps overwriting what somebody typed is worse than one that
   // never filled itself in.
   if (name && !state.pathTouched) $('#root').value = joinPath(DATA.base, name);
-  $('#s3').classList.toggle('off', !name);
+  // A named place can be described and located; what it will hold waits for the count.
+  for (const id of ['#s3', '#s4', '#s5', '#s6']) $(id).classList.toggle('off', !name);
   openRest(false);
   voidPlan();
 }
@@ -602,52 +659,74 @@ async function doCount() {
 function set(k, v) { state.touched.add(k); state.answers[k] = v; voidPlan(); }
 
 function renderFields() {
-  const a = state.type, box = $('#fields');
-  box.replaceChildren();
+  // One answer per step, each painted into its own section. The page asks what the type
+  // declares and nothing else: an answer with no control behind it is not shown at all, and
+  // the reasons live in `serve.INERT`.
+  const a = state.type;
+  if (!a) return;
+  const asks = new Set(a.asks.filter(k => !DATA.inert[k]));
 
-  for (const ask of a.asks) {
-    // An answer with no control behind it is not shown at all any more. The reasons live in
-    // `serve.INERT` and in the changelog; the page asks what it asks.
-    if (DATA.inert[ask]) continue;
-    if (ask === 'root' || ask === 'name') continue;      // asked at steps 3 and 2
+  const purpose = $('#f-purpose');
+  purpose.replaceChildren();
+  if (asks.has('remit')) {
+    purpose.append(field('Purpose',
+      'One line, in your words: what this vault is for. It goes into CLAUDE.md, so the ' +
+      'next session reads it before anything else.',
+      area(state.answers.remit || '',
+           v => { state.remitTouched = true; set('remit', v); },
+           'Everything the role owes, produces and decides, in one place.')));
+  }
 
-    if (ask === 'remit') {
-      box.append(field('Purpose',
-        'One line, in your words: what this vault is for. It goes into CLAUDE.md, so the ' +
-        'next session reads it before anything else.',
-        area(state.answers.remit || '',
-             v => { state.remitTouched = true; set('remit', v); },
-             'Everything the role owes, produces and decides, in one place.')));
-    } else if (ask === 'content_languages') {
-      if (!state.answers.content_languages) {
-        state.answers.content_languages = state.answers.output_language || 'en';
-      }
-      box.append(field('Content languages',
-        'What you will write cards and notes in. Pick more than one if that is the truth.',
-        chips([['en', 'English'], ['ru', 'Russian'], ['kk', 'Kazakh']],
-              String(state.answers.content_languages).split('|'), true,
-              v => { set('content_languages', v.join('|')); renderFields(); })));
-    } else if (ask === 'filename_language') {
-      if (!state.answers.filename_language) state.answers.filename_language = 'english';
-      // Only a question where it is one. With English content, a file name in the content
-      // language IS an English file name, and asking would be asking twice.
-      if (String(state.answers.content_languages || 'en').split('|')
-            .some(c => c && c !== 'en')) {
-        box.append(field('File names',
-          'Folders, identifiers and keys stay English either way. This is about a file '
-          + 'named for its subject.',
-          chips([['english', 'English only'], ['content', 'Match the content']],
-                [state.answers.filename_language], false,
-                v => set('filename_language', v[0] || 'english'))));
-      }
-    } else if (ask === 'governance_tier') {
-      box.append(field('Tier',
-        'What your file count supports.',
-        tiers()));
+  const art = $('#f-artefact');
+  art.replaceChildren();
+  if (asks.has('first_artefact')) {
+    // Asked, not assumed. The engine decides who promised it by comparing what arrives with
+    // the type's own sentence, so a field left as it came is still recorded as a default.
+    art.append(field('First artefact',
+      'What this place hands somebody first, and by when. Twenty files you have already ' +
+      'written lift the tier too; naming this is the other way.',
+      input('text', state.answers.first_artefact || '',
+            v => { set('first_artefact', v); refreshCounts(); })));
+  }
+
+  const langs = $('#f-langs');
+  langs.replaceChildren();
+  if (asks.has('content_languages')) {
+    if (!state.answers.content_languages) {
+      state.answers.content_languages = state.answers.output_language || 'en';
+    }
+    langs.append(field('Content languages',
+      'What you will write cards and notes in. Pick more than one if that is the truth.',
+      chips([['en', 'English'], ['ru', 'Russian'], ['kk', 'Kazakh']],
+            String(state.answers.content_languages).split('|'), true,
+            v => { set('content_languages', v.join('|')); renderFields(); })));
+  }
+  if (asks.has('filename_language')) {
+    if (!state.answers.filename_language) state.answers.filename_language = 'english';
+    // Only a question where it is one. With English content, a file name in the content
+    // language IS an English file name, and asking would be asking twice.
+    if (String(state.answers.content_languages || 'en').split('|')
+          .some(c => c && c !== 'en')) {
+      langs.append(field('File names',
+        'Folders, identifiers and keys stay English either way. This is about a file '
+        + 'named for its subject.',
+        chips([['english', 'English only'], ['content', 'Match the content']],
+              [state.answers.filename_language], false,
+              v => set('filename_language', v[0] || 'english'))));
+    }
+  }
+
+  const tier = $('#f-tier');
+  tier.replaceChildren();
+  if (asks.has('governance_tier')) {
+    tier.append(field('Tier', 'What your file count supports.', tiers()));
+    if (!(state.counts && state.counts.exists)) {
+      tier.append(el('p', {class: 'msg'},
+        'Check the folder at step six first: the tiers are derived from what is already ' +
+        'there, not handed down.'));
     }
   }
   paintTiers();
-  paintRail();
 }
 
 const field = (label, hint, ctrl) =>
