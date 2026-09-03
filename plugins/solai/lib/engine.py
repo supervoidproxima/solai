@@ -19,6 +19,7 @@ The five-state classifier is the whole re-run story:
 import io
 import os
 import time
+import tomllib
 
 from . import VERSION, decl, fm, fsplan, regions, stamp
 from .emit import (load_labels, agent, bases, bond, cardskill, claudemd, starthere,
@@ -43,6 +44,10 @@ class Result(object):
         self.errors = []
         self.notes = []
         self.deferred = []
+        # What every generated region WOULD contain, keyed by artefact path then region id.
+        # Recorded even when the plan is a NOOP, because that is exactly when someone asks
+        # `--diff` what a hand-edited block would say if it were regenerated.
+        self.regions = {}
 
 
 # --------------------------------------------------------------------------- helpers
@@ -102,7 +107,33 @@ def classify_file(existing, expected_src, mode, volatile=None):
     return {stamp.UNSTAMPED: 'FOREIGN'}.get(v, v)
 
 
-def merge_regions(existing, region_text, expected_src, order, force=()):
+RECONCILED = 'RECONCILED'
+ADOPTED = 'ADOPTED'
+
+
+def read_adopted(root):
+    """Hand edits somebody has taken responsibility for -> {(artefact, region): record}.
+
+    An adopted region is still skipped and still never overwritten. What changes is that the
+    divergence has a name, a date and a change record instead of being an anonymous dirty
+    block nobody can account for. Edit it again and its sha stops matching, and it reads
+    HAND-EDITED once more.
+    """
+    p = os.path.join(root, '_system', 'os', 'adopted.toml')
+    out = {}
+    if not os.path.exists(p):
+        return out
+    try:
+        with open(p, 'rb') as fh:
+            data = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return out
+    for row in data.get('adopted', []):
+        out[(row.get('artefact'), row.get('region'))] = row
+    return out
+
+
+def merge_regions(existing, region_text, expected_src, order, force=(), adopted=None):
     """-> (new_text, per_region_verdict). A dirty region costs one region, not the file."""
     text, verdicts = existing, {}
     for rid in order:
@@ -115,6 +146,23 @@ def merge_regions(existing, region_text, expected_src, order, force=()):
             continue
         v = found.verdict(expected_src)
         if v == stamp.HAND_EDITED and rid not in force:
+            # RECONCILED. The body no longer matches its stamp, AND it is byte-identical to
+            # what the declaration now produces: somebody edited the block to say what the
+            # declaration has since caught up with. Re-stamp and report it. Nothing is
+            # discarded and no visible byte changes.
+            #
+            # This is NOT the act `lib/stamp.py` forbids. That is rewriting a hash to silence
+            # a mismatch with UNKNOWN content. This corrects a hash over content the
+            # declaration provably generates. Without the rule a block stays permanently
+            # dirty even once its content has become correct, which is a wart with no upside.
+            if found.content.strip() == region_text[rid].strip():
+                verdicts[rid] = RECONCILED
+                text = regions.replace(text, rid, region_text[rid], expected_src)
+                continue
+            row = (adopted or {}).get(rid)
+            if row and row.get('body-sha') == stamp.body_sha(found.content):
+                verdicts[rid] = '%s %s' % (ADOPTED, row.get('because') or 'no record named')
+                continue
             verdicts[rid] = stamp.HAND_EDITED
             continue
         if v == stamp.CLEAN and found.content.strip() == region_text[rid].strip():
@@ -209,6 +257,13 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
     def src_for(emitter):
         return stamp.source_sha(VERSION, emitter, src_inputs)
 
+    # Hand edits somebody has signed for. Keyed by artefact path, then region id, so a
+    # merge only ever consults the rows written about the file it is merging.
+    adopted_rows = read_adopted(root)
+    adopted = {}
+    for (art_path, rid), row in adopted_rows.items():
+        adopted.setdefault(art_path, {})[rid] = row
+
     # 1 folders --------------------------------------------------------------
     for f in arch.folders:
         p = f.get('path')
@@ -262,6 +317,25 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
                 else:
                     plan.copy(target, 'materials', source)
 
+    # 2c the manifest compiled in, so the vault holds the whole declaration --------
+    # Classes, agents and workflows were already copied here; the manifest was the one file
+    # left behind, and it holds the four things the emitters cannot get from a class: the
+    # folders, the loop, the date format and the artefact list. Without it a vault could be
+    # VALIDATED against its own declarations and never REGENERATED from them, which is how
+    # one vault ended up with a hand-maintained section listing the generated blocks that
+    # had gone wrong and could not be fixed from inside it.
+    #
+    # Hardcoded here rather than declared as an artefact, because the three declaration
+    # copies above have no artefact entry either and the precedent should not fork.
+    if os.path.exists(os.path.join(arch.root, 'manifest.toml')):
+        target = OS_DIR + '/manifest.toml'
+        body = io.open(os.path.join(arch.root, 'manifest.toml'), encoding='utf-8').read()
+        cur = fsplan.read(plan.path(target))
+        if cur == body:
+            plan.noop(target, 'declarations')
+        else:
+            plan.write(target, 'declarations', body)
+
     # 3 declarations compiled into the vault ---------------------------------
     for c in classes:
         target = OS_DIR + '/classes/' + os.path.basename(c.path)
@@ -302,7 +376,8 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
         _merged(plan, art, s, text, art.get('regions', []), force, result,
                 lambda: EC.skeleton(L, text, tuple(art.get('regions', [])), s),
                 fmeta={'date': _today(), 'type': 'reference',
-                       'title': '"%s (GENERATED)"' % L('dd.title'), 'tags': []})
+                       'title': '"%s (GENERATED)"' % L('dd.title'), 'tags': []},
+                adopted=adopted.get(art['path'], {}))
 
     # 5 vocabulary ------------------------------------------------------------
     art = arch.artefact('vocabulary')
@@ -312,7 +387,8 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
         _merged(plan, art, s, text, ['keys'], force, result,
                 lambda: vocabulary.skeleton(L, text['keys'], s),
                 fmeta={'date': _today(), 'type': 'reference', 'title': '"Vocabulary"',
-                       'tags': []})
+                       'tags': []},
+                adopted=adopted.get(art['path'], {}))
 
     # 6 card skills -----------------------------------------------------------
     art = arch.artefact('card-skills')
@@ -333,7 +409,8 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
                     continue
                 plan.write(target, 'skill:' + c.skill, body, src=s)
             else:
-                new, verdicts = merge_regions(cur, rt, s, list(cardskill.REGIONS), force)
+                result.regions.setdefault(target, {}).update(rt)
+                new, verdicts = merge_regions(cur, rt, s, list(cardskill.REGIONS), force, adopted.get(target, {}))
                 _record_merge(plan, target, 'skill:' + c.skill, cur, new, verdicts)
 
     # 6b agents ---------------------------------------------------------------
@@ -355,7 +432,8 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
                     continue
                 plan.write(target, 'agent:' + a.name, body, src=s)
             else:
-                new, verdicts = merge_regions(cur, rt, s, list(agent.REGIONS), force)
+                result.regions.setdefault(target, {}).update(rt)
+                new, verdicts = merge_regions(cur, rt, s, list(agent.REGIONS), force, adopted.get(target, {}))
                 _record_merge(plan, target, 'agent:' + a.name, cur, new, verdicts)
 
     # 6c workflows -------------------------------------------------------------
@@ -385,8 +463,29 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
                     continue
                 plan.write(target, 'workflow:' + w.name, body, src=s)
             else:
-                new, verdicts = merge_regions(cur, rt, s, list(workflow.REGIONS), force)
+                result.regions.setdefault(target, {}).update(rt)
+                new, verdicts = merge_regions(cur, rt, s, list(workflow.REGIONS), force, adopted.get(target, {}))
                 _record_merge(plan, target, 'workflow:' + w.name, cur, new, verdicts)
+
+    # 6d skills projecting a class nobody declares any more --------------------
+    # Reported, never deleted. D7 requires a retirement to name the fate of every affected
+    # artefact from a closed set, and the engine cannot know which fate the cards deserve.
+    # Before this, retiring a class left a live skill writing into a folder that no longer
+    # existed and nothing said so: one vault ran four days that way, and its own
+    # hand-written "known drift" section - the place such a thing was supposed to be
+    # recorded - sat empty. This class of drift is computed, not remembered.
+    if arch.artefact('card-skills') and wanted('card-skills'):
+        skills_dir = os.path.join(root, '.claude', 'skills')
+        live = {c.skill for c in classes} | {c.skill for c in arch.lookups}
+        for name in sorted(os.listdir(skills_dir)) if os.path.isdir(skills_dir) else ():
+            if name.startswith('_') or name in live:
+                continue
+            if not os.path.exists(os.path.join(skills_dir, name, 'SKILL.md')):
+                continue
+            result.deferred.append(
+                '.claude/skills/%s/SKILL.md projects a class no longer declared. Retire it '
+                'with a change record naming the fate of its cards: leave, migrate, '
+                'regenerate, orphan.' % name)
 
     # 7 base ------------------------------------------------------------------
     art = arch.artefact('registry-base')
@@ -430,11 +529,14 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
         gen = claudemd.render_generated(L, arch, classes, answers)
         order = art.get('regions', [])
         cur = fsplan.read(plan.path('CLAUDE.md'))
+        result.regions.setdefault('CLAUDE.md', {}).update(gen)
         if cur is None:
             body = claudemd.skeleton(pkg_root, L, arch, classes, answers, order, gen, s)
             plan.write('CLAUDE.md', 'claude-md', body, src=s)
         else:
-            new, verdicts = merge_regions(cur, gen, s, order, force)
+            result.regions.setdefault('CLAUDE.md', {}).update(gen)
+            new, verdicts = merge_regions(cur, gen, s, order, force,
+                                          adopted.get(art['path'], {}))
             _record_merge(plan, 'CLAUDE.md', 'claude-md', cur, new, verdicts)
 
     # 10 the bond, written last: it reports counts of everything above --------
@@ -491,8 +593,10 @@ def _generated(plan, path, aid, body, src, force, volatile=None, fmeta=None, fme
                    verdict=state if state != stamp.CLEAN else 'CONTENT-CHANGED')
 
 
-def _merged(plan, art, src, region_text, order, force, result, first_write, fmeta=None):
+def _merged(plan, art, src, region_text, order, force, result, first_write,
+            fmeta=None, adopted=None):
     path = art['path']
+    result.regions.setdefault(path, {}).update(region_text)
     cur = fsplan.read(plan.path(path))
     if cur is None:
         body = first_write()
@@ -502,23 +606,33 @@ def _merged(plan, art, src, region_text, order, force, result, first_write, fmet
             body = fm.join(fmt, stamp.normalise(body))
         plan.write(path, art['id'], body, src=src)
         return
-    new, verdicts = merge_regions(cur, region_text, src, list(order), force)
+    new, verdicts = merge_regions(cur, region_text, src, list(order), force, adopted)
     _record_merge(plan, path, art['id'], cur, new, verdicts)
 
 
 def _record_merge(plan, path, aid, cur, new, verdicts):
     dirty = [r for r, v in verdicts.items() if v == stamp.HAND_EDITED]
+    signed = [(r, v) for r, v in verdicts.items() if str(v).startswith(ADOPTED)]
+    fixed = [r for r, v in verdicts.items() if v == RECONCILED]
     if new == cur:
-        clean = len(verdicts) - len(dirty)
+        clean = len(verdicts) - len(dirty) - len(signed)
         plan.noop(path, aid, reason='%d regions clean%s'
                   % (clean, (', %d left alone' % len(dirty)) if dirty else ''))
     else:
-        plan.write(path, aid, new,
-                   verdict='%d updated' % len([v for v in verdicts.values()
-                                               if v in (stamp.STALE, 'ABSENT')]))
+        parts = ['%d updated' % len([v for v in verdicts.values()
+                                     if v in (stamp.STALE, 'ABSENT')])]
+        if fixed:
+            parts.append('%d reconciled' % len(fixed))
+        plan.write(path, aid, new, verdict=', '.join(parts))
     if dirty:
         plan.skip(path + ' [' + ', '.join(dirty) + ']', aid, stamp.HAND_EDITED,
-                  'region hand-edited; left alone')
+                  'region hand-edited; left alone. Sign for it with '
+                  '`--adopt <region> --because CHG-NNN`, or see what changed with '
+                  '`--diff <region>`')
+    for rid, v in signed:
+        # Still skipped, still never overwritten. The difference is that somebody's name and
+        # a change record are on it, which is the whole of what adoption buys.
+        plan.skip(path + ' [' + rid + ']', aid, ADOPTED, str(v)[len(ADOPTED) + 1:])
 
 
 # --------------------------------------------------------------------------- gates

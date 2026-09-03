@@ -43,6 +43,10 @@ the attachment conventions to be declared against.
 and its card skill are not written. The declaration still ships and is still installable;
 it is the building of it by default that stopped.
 
+Every archetype then gained one more row: `_system/os/manifest.toml`, the last piece of the
+declaration to be compiled into the vault. With it a place can be regenerated from its own
+declarations rather than only validated against them.
+
 Two extra checkers run against any place that carries workflows: `check_workflow_js.py` proves
 each projection is real JavaScript with an evaluable `meta` literal, and
 `check_workflow_resume.py` replays each script twice with the runtime stubbed and demands an
@@ -73,10 +77,10 @@ SCAFFOLD = os.path.join(PKG, 'skills', 'solai-scaffold', 'scaffold.py')
 FRESH_GATES = {'AV-3'}
 
 CASES = (
-    ('minimal', 'en', 6, 0, 0),
-    ('project', 'en', 44, 5, 3),
-    ('personal', 'ru', 32, 2, 0),
-    ('role', 'en', 36, 5, 2),
+    ('minimal', 'en', 7, 0, 0),
+    ('project', 'en', 45, 5, 3),
+    ('personal', 'ru', 33, 2, 0),
+    ('role', 'en', 37, 5, 2),
 )
 
 ANSWERS = ('remit=A throwaway place built only to verify the engine.',
@@ -229,6 +233,57 @@ def main():
             rows.append((arch, lang, 'NOOP %d  agents %d  workflows %d'
                          % (noop, len(got), len(got_wf)),
                          '   ' + '   '.join(checks)))
+
+        # ------------------------------------------------------- the vault evolves
+        # The executable form of the defect this release exists to fix. A `role` place is
+        # built, then mutated the way a real one was - a class retired by deleting its
+        # declaration, and the link that pointed at it removed - and re-applied. The claim
+        # is that the projections follow the vault's OWN declarations: before this, they
+        # followed the package, so a place could be validated correctly and regenerated
+        # wrongly, and its CLAUDE.md went on naming a class that no longer existed.
+        root = os.path.join(tmp, 'role')
+        checks, ok = [], True
+        if os.path.isdir(root):
+            os.remove(os.path.join(root, '_system', 'os', 'classes', 'deliverable.toml'))
+            duty = os.path.join(root, '_system', 'os', 'classes', 'duty.toml')
+            text = io.open(duty, encoding='utf-8').read()
+            i = text.index('[[links]]')
+            kept = [b for b in text[i:].split('[[links]]')
+                    if b.strip() and 'target     = "deliverable"' not in b]
+            text = text[:i] + ''.join('[[links]]' + b for b in kept)
+            text = text.replace('"deliverable", ', '').replace(', "deliverable"', '')
+            io.open(duty, 'w', encoding='utf-8', newline='\n').write(text)
+
+            code, out = run([SCAFFOLD, root, '--apply'])
+            claude = io.open(os.path.join(root, 'CLAUDE.md'), encoding='utf-8').read()
+            index_region = claude.split('solai:begin card-index')[-1].split('solai:end')[0]
+            dd = io.open(os.path.join(root, '_system', 'data-dictionary.md'),
+                         encoding='utf-8').read()
+
+            if 'declarations: this vault' not in out:
+                failures.append('evolved: the run did not read the compiled declarations')
+                ok = False
+            if 'DLV' in index_region or 'Deliverable' in index_region:
+                failures.append('evolved: the card index still names the retired class')
+                ok = False
+            if 'DLV-NNN' in dd:
+                failures.append('evolved: the data dictionary still carries the retired schema')
+                ok = False
+            if not os.path.exists(os.path.join(root, '.claude', 'skills', 'deliverable',
+                                               'SKILL.md')):
+                failures.append('evolved: the orphaned skill was DELETED. D7 requires a '
+                                'retirement to name the fate of its artefacts, not assume one')
+                ok = False
+            if 'projects a class no longer declared' not in out:
+                failures.append('evolved: the orphaned skill was not reported as a deferral')
+                ok = False
+            code2, out2 = run([SCAFFOLD, root, '--apply'])
+            if 'nothing to do' not in out2:
+                failures.append('evolved: the run after the change is not a NOOP')
+                ok = False
+            checks.append('retired a class, regenerated from the vault: %s'
+                          % ('ok' if ok else 'FAILED'))
+            rows.append(('evolved', 'en', 'role, one class retired', '   ' + checks[0]))
 
         print('')
         for arch, lang, verdict, detail in rows:

@@ -716,6 +716,89 @@ def load_archetype(pkg_root, name):
     return arch
 
 
+def load_compiled(vault_root):
+    """Load an archetype from a vault's OWN compiled declarations, not from the package.
+
+    -> (archetype, notes). Raises DeclError with every reason, like `load_archetype`.
+
+    WHY THIS EXISTS. `validate_cards.py` has always read `_system/os/classes/*.toml` at
+    runtime, so a vault that renames a class is still validated correctly. The emitters read
+    the package archetype, so the same vault could never be REGENERATED correctly: its
+    `CLAUDE.md` went on naming a class it had retired, and `CLAUDE.md` itself said not to
+    hand-edit the block but to edit the declaration - which lived with the generator, in a
+    directory the vault's own governance puts out of scope. One real vault gave up and wrote
+    a hand-maintained section titled "Where the generated sections are wrong".
+
+    CLASSES ARE DISCOVERED BY LISTING THE DIRECTORY, never from the manifest's `classes`
+    list. This is the load-bearing choice. Deleting `decision.toml` IS the retirement and
+    adding `duty.toml` IS the rename; reading the list instead would make a stale list
+    authoritative and rebuild the whole defect. The manifest's lists are kept only to say
+    which declarations are lookups, and to report what changed.
+
+    A name listed with no file, or a file present and unlisted, is a NOTE and never an
+    error. Refusing there would block exactly the evolution this exists to permit.
+    """
+    os_dir = os.path.join(vault_root, '_system', 'os')
+    manifest = os.path.join(os_dir, 'manifest.toml')
+    if not os.path.exists(manifest):
+        raise DeclError(['no compiled manifest at %s. This vault was built before the engine '
+                         'compiled one in; the scaffold synthesises it on the next apply.'
+                         % manifest])
+    arch = Archetype(_read(manifest), os_dir)
+    errors, notes = [], []
+
+    def discover(kind, make, check, listed):
+        d = os.path.join(os_dir, kind)
+        found = {}
+        for name in sorted(os.listdir(d)) if os.path.isdir(d) else ():
+            if not name.endswith('.toml'):
+                continue
+            p = os.path.join(d, name)
+            try:
+                obj = make(_read(p), p)
+            except tomllib.TOMLDecodeError as exc:
+                errors.append('%s: not valid TOML: %s' % (p, exc))
+                continue
+            key = getattr(obj, 'name', None)
+            if not key:
+                errors.append('%s: declares no name, so nothing can be projected from it.' % p)
+                continue
+            check(obj, errors)
+            found[key] = obj
+        for gone in [n for n in listed if n not in found]:
+            notes.append('%s: the manifest lists %r and no declaration is compiled in. Read '
+                         'as retired.' % (kind, gone))
+        for extra in [n for n in found if n not in listed]:
+            notes.append('%s: %r is compiled in and the manifest does not list it. Read as '
+                         'added.' % (kind, extra))
+        return found
+
+    def ordered(found, listed):
+        """Manifest order first, then anything discovered beside it, alphabetically.
+
+        Order is not cosmetic: the emitters walk this list, so it sets the row order of the
+        card index, the sections of the data dictionary and the views in the base. Sorting
+        by filename instead would rewrite all three on the first compiled run of every
+        vault already built, for no reason a reader could see.
+        """
+        out = [found[n] for n in listed if n in found]
+        return out + [found[n] for n in sorted(found) if n not in listed]
+
+    cards = discover('classes', CardClass, _validate_class,
+                     list(arch.class_names) + list(arch.lookup_names))
+    for c in ordered(cards, list(arch.class_names) + list(arch.lookup_names)):
+        (arch.lookups if c.name in arch.lookup_names else arch.classes).append(c)
+    arch.agents = ordered(discover('agents', Agent, _validate_agent, arch.agent_names),
+                          arch.agent_names)
+    arch.workflows = ordered(discover('workflows', Workflow, _validate_workflow,
+                                      arch.workflow_names), arch.workflow_names)
+
+    _validate_set(arch, errors)
+    if errors:
+        raise DeclError(errors)
+    return arch, notes
+
+
 def _validate_set(arch, errors):
     """Cross-declaration checks. These are the ones that make the projections consistent."""
     all_decls = arch.classes + arch.lookups

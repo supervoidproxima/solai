@@ -5,8 +5,28 @@
     py scaffold.py <vault-root> --archetype role --materials "<file or folder>" ...
     py scaffold.py <vault-root> --apply
     py scaffold.py <vault-root> --rollback
+    py scaffold.py <vault-root> --diff <region>
+    py scaffold.py <vault-root> --adopt <region> --because CHG-NNN
+    py scaffold.py <vault-root> --from-package
 
 `--plan` is the default and writes nothing. Exit 1 on any refusal.
+
+WHICH DECLARATIONS THIS READS, and it says so on every run. A vault that has been built
+before - one carrying `_system/os/answers.toml` - is regenerated from its OWN compiled
+declarations in `_system/os/`, not from the package archetype. That is what lets a vault
+rename a class, retire one, or change a filename policy and still regenerate truthfully.
+Before it, `CLAUDE.md` told its reader to edit the declaration rather than the block, and
+the declaration lived in a directory the vault did not have.
+
+A vault built before the engine compiled its manifest in has no `_system/os/manifest.toml`.
+The run SYNTHESISES one from the package archetype its answers name, and plans that write as
+its own row. The naive alternative - no manifest, therefore package mode - would run a
+renamed vault against the package's original classes and write the retired ones back beside
+the live ones. That is the exact catastrophe this exists to prevent, performed by the fix.
+
+Emitters and fragments are code and always come from the package; only DECLARATIONS become
+vault-local. So an emitter fix reaches every vault on a plain `--apply`, and only a
+declaration change needs `--from-package`.
 """
 import os
 import sys
@@ -21,9 +41,23 @@ from lib import decl, engine, fsplan, VERSION  # noqa: E402
 sys.stdout.reconfigure(encoding='utf-8')
 
 
+HEAD_ADOPTED = (
+    "# Hand edits somebody has signed for. Each row keeps its region skipped and never\n"
+    "# overwritten, exactly as before. What it adds is a name, a date and a change record.\n"
+    "# Edit the region again and its sha stops matching, and it reads HAND-EDITED once more.\n")
+
+ROW_ADOPTED = (
+    '\n[[adopted]]\n'
+    'artefact = "%s"\n'
+    'region   = "%s"\n'
+    'body-sha = "%s"\n'
+    'because  = "%s"\n'
+    'date     = "%s"\n')
+
+
 def parse_argv(argv):
     opts = {'answers': {}, 'only': None, 'force': (), 'mode': 'plan', 'archetype': None,
-            'materials': []}
+            'materials': [], 'region': None, 'because': None, 'from_package': False}
     positional = []
     i = 0
     while i < len(argv):
@@ -34,6 +68,19 @@ def parse_argv(argv):
             opts['mode'] = 'rollback'
         elif a == '--plan':
             opts['mode'] = 'plan'
+        elif a == '--from-package':
+            opts['from_package'] = True
+        elif a == '--diff':
+            opts['mode'] = 'diff'
+            i += 1
+            opts['region'] = argv[i]
+        elif a == '--adopt':
+            opts['mode'] = 'adopt'
+            i += 1
+            opts['region'] = argv[i]
+        elif a == '--because':
+            i += 1
+            opts['because'] = argv[i]
         elif a == '--archetype':
             i += 1
             opts['archetype'] = argv[i]
@@ -59,6 +106,82 @@ def parse_argv(argv):
         i += 1
     opts['root'] = os.path.abspath(positional[0]) if positional else os.getcwd()
     return opts
+
+
+def _rendered_regions(root, pkg, answers, arch):
+    """Every generated region a run would produce -> {(path, region id): text}.
+
+    Built by planning and writing nothing. The plan is the authority on what a region would
+    contain, so asking it is the only way `--diff` can be trusted not to describe something
+    the apply would not do.
+    """
+    out = {}
+    result = engine.Result()
+    engine.build_plan(root, pkg, answers, arch, result)
+    for path, regs in result.regions.items():
+        for rid, text in regs.items():
+            out[(path, rid)] = text
+    return out
+
+
+def region_mode(root, pkg, answers, arch, o):
+    """`--diff <region>` and `--adopt <region> --because CHG-NNN`.
+
+    Neither exists to make a hand edit go away. `--diff` answers the question a dirty region
+    could not answer before - what was changed - and `--adopt` records that somebody has
+    taken responsibility for it, without touching the region or its marker. An adopted
+    region is still skipped and still never overwritten.
+    """
+    import difflib
+    from lib import regions as R, stamp as ST
+
+    rid = o['region']
+    wanted = _rendered_regions(root, pkg, answers, arch)
+    hits = sorted({path for (path, r) in wanted if r == rid})
+    if not hits:
+        print('  no generated region %r. Known: %s'
+              % (rid, ', '.join(sorted({r for _, r in wanted}))))
+        return 1
+
+    for path in hits:
+        text = fsplan.read(os.path.join(root, path.replace('/', os.sep)))
+        if text is None:
+            print('  %s does not exist yet, so there is nothing to compare.' % path)
+            continue
+        found = R.find_all(text).get(rid)
+        if found is None:
+            print('  %s carries no region %r.' % (path, rid))
+            continue
+        now, would = found.content.strip(), wanted[(path, rid)].strip()
+
+        if o['mode'] == 'diff':
+            print()
+            print('%s [%s]   %s' % (path, rid, found.verdict(None)))
+            if now == would:
+                print('  identical to what the declarations produce.')
+                continue
+            for line in difflib.unified_diff(now.split('\n'), would.split('\n'),
+                                             'in the vault', 'from the declarations',
+                                             lineterm=''):
+                print('  ' + line)
+            continue
+
+        if not o['because']:
+            print('  --adopt needs --because CHG-NNN. A divergence with no record behind it '
+                  'is the state adoption exists to end, not one to write down.')
+            return 1
+        if found.verdict(None) != ST.HAND_EDITED:
+            print('  %s [%s] is not hand-edited, so there is nothing to adopt.' % (path, rid))
+            return 1
+        target = os.path.join(root, '_system', 'os', 'adopted.toml')
+        head = '' if os.path.exists(fsplan.w(target)) else HEAD_ADOPTED
+        row = ROW_ADOPTED % (path, rid, ST.body_sha(found.content), o['because'],
+                             engine._today())
+        with open(fsplan.w(target), 'a', encoding='utf-8', newline='\n') as fh:
+            fh.write(head + row)
+        print('  adopted %s [%s] under %s. Still skipped, still never overwritten.'
+              % (path, rid, o['because']))
+    return 0
 
 
 def main():
@@ -89,12 +212,34 @@ def main():
         return 1
     answers['archetype'] = archetype
 
+    # ---------------------------------------------------------------- which declarations
+    # Vault-local iff this vault has been built before. `answers.toml` is the test rather
+    # than the presence of `_system/os/classes/`, because `minimal` declares no classes at
+    # all and would otherwise be misread as a first build every time.
+    built_before = os.path.exists(os.path.join(root, engine.ANSWERS.replace('/', os.sep)))
+    compiled = os.path.join(root, '_system', 'os', 'manifest.toml')
+    notes = []
     try:
-        arch = decl.load_archetype(PKG, archetype)
+        if built_before and not o['from_package'] and os.path.exists(compiled):
+            arch, notes = decl.load_compiled(root)
+            print('  declarations: this vault  (_system/os)')
+        else:
+            arch = decl.load_archetype(PKG, archetype)
+            if o['from_package'] and built_before:
+                print('  declarations: package  (archetypes/%s), re-imported on request'
+                      % archetype)
+            elif built_before:
+                print('  declarations: package  (archetypes/%s), and this vault has no '
+                      'compiled manifest yet. This plan writes one; the run after this '
+                      'reads the compiled copy.' % archetype)
+            else:
+                print('  declarations: package  (archetypes/%s), first build' % archetype)
     except decl.DeclError as e:
         print('  the declarations do not hold together, so nothing was written:')
         print(e)
         return 1
+    for n in notes:
+        print('  note: %s' % n)
 
     answers.setdefault('governance_tier', arch.default_tier)
     answers.setdefault('output_language', 'en')
@@ -112,6 +257,9 @@ def main():
         answers.get('first_artefact'), first_default)
     answers.setdefault('first_artefact', first_default)
     answers.setdefault('changes_folder', arch.defaults.get('changes_folder', 'changes'))
+
+    if o['mode'] in ('diff', 'adopt'):
+        return region_mode(root, PKG, answers, arch, o)
 
     result = engine.Result()
     plan, L, tier = engine.build_plan(root, PKG, answers, arch, result,
