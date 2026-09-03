@@ -82,10 +82,10 @@ tier on the strength of an answer they declined to give.
 - **Seed `people/` with both**, the holder and the predecessor, before any card is written.
   The predecessor's note records what still points at them: the addresses on forms, the
   names on plans, the contacts on documents that go outside. That list is the handover.
-- **The first artefact is a handover, not an obligation register.** Offer it in place of the
+- **The first artefact is a handover, not a duty register.** Offer it in place of the
   archetype default and say why: a register reconstructed from someone else's practice
   cannot be confirmed against a charter nobody has produced yet.
-- **Every obligation read from the archive records whose practice it was.** A duty the
+- **Every duty read from the archive records whose practice it was.** A duty the
   predecessor chose to run is not thereby a duty the role owes, and only the constitutive
   documents separate the two. Say so on the card at the time, not afterwards.
 - **Check `charter/` early and say plainly if it is empty.** For a successor it usually is,

@@ -60,21 +60,51 @@ def frontmatter(c, L, vault_name, tier, output_language):
 
 
 def step_id(c, L):
-    return '\n'.join([
-        'Glob `%s/%s-*.md`. Take the highest NNN and add one. With none present, start at '
-        '`%s-001`.' % (c.folder, c.prefix, c.prefix),
+    """The number is read out of `id:`, never off a filename.
+
+    A glob over filenames is right under `bare-id` only by coincidence, and wrong under
+    `slug`, where it matches nothing and restarts the sequence at 001 over a folder already
+    full of cards. One instruction that holds under both policies is worth more than two
+    that each hold under one.
+    """
+    lines = [
+        'Search `%s/` for lines matching `^id: %s-`. Take the highest NNN and add one. With '
+        'none present, start at `%s-001`.' % (c.folder, c.prefix, c.prefix),
         '',
         'Zero-padded to three digits. Numbers are never reused, and never renumbered: a '
         'gap in the sequence is cheaper than a reference that silently points somewhere new.',
-    ])
+        '',
+    ]
+    if c.filename == 'slug':
+        lines.append('The filename does not carry the number. Nothing may be minted from a '
+                     'glob over filenames: it would match no card, and restart at `%s-001` '
+                     'over every card already here.' % c.prefix)
+    else:
+        lines.append('The filename mirrors the `id`, so a glob over filenames is a '
+                     'cross-check and never the source.')
+    return '\n'.join(lines)
 
 
 def step_fields(c, L, partition=None):
-    rows = [[code('id'), L('skill.frontmatter'), L('dd.yes'), '`%s-NNN`, matching the filename' % c.prefix],
-            [code('type'), L('skill.frontmatter'), L('dd.yes'), code(c.name)],
-            [code('date'), L('skill.frontmatter'), L('dd.yes'), 'today, `YYYY-MM-DD`'],
-            [code('status'), L('skill.frontmatter'), L('dd.yes'),
-             '%s. New card: `%s`' % (enum_list(c.statuses), c.status_default)]]
+    # Under `slug` the filename carries no identifier, so `id` is the card's only identity
+    # and `aliases` is what keeps every existing `[[PFX-NNN]]` citation resolving. Both are
+    # required, and both are derived from the policy rather than added to the card by hand.
+    if c.filename == 'slug':
+        rows = [[code('id'), L('skill.frontmatter'), L('dd.yes'),
+                 "`%s-NNN`. The filename is a slug, so this is the card's only identity"
+                 % c.prefix],
+                [code('title'), L('skill.frontmatter'), L('dd.yes'),
+                 'human-readable name, matching the H1'],
+                [code('aliases'), L('skill.frontmatter'), L('dd.yes'),
+                 '`["%s-NNN"]`. Carries the identifier, so every `[[%s-NNN]]` citation '
+                 'resolves' % (c.prefix, c.prefix)]]
+    else:
+        rows = [[code('id'), L('skill.frontmatter'), L('dd.yes'),
+                 '`%s-NNN`, matching the filename' % c.prefix]]
+    rows += [[code('type'), L('skill.frontmatter'), L('dd.yes'), code(c.name)],
+             [code('date'), L('skill.frontmatter'), L('dd.yes'), 'today, `YYYY-MM-DD`'],
+             [code('status'), L('skill.frontmatter'), L('dd.yes'),
+              '%s. New card: `%s`' % (enum_list(c.statuses), c.status_default)]]
     for f in c.fields:
         if f.derived_by:
             rows.append([code(f.name), L('skill.frontmatter'), L('dd.no'),
@@ -140,13 +170,22 @@ def step_body(c, L):
 
 
 def step_write(c, L):
+    if c.filename == 'slug':
+        where = ("Write `%s/{slug}.md`, where the slug is a kebab-case rendering of the "
+                 "card's `title`. The identifier never appears in the filename: it lives in "
+                 "`id` and is repeated in `aliases`." % c.folder)
+        report = 'v %s/{slug}.md   {ID}' % c.folder
+    else:
+        where = ('Write `%s/{ID}.md`. The filename is the bare ID: no slug, no date, no '
+                 'title.' % c.folder)
+        report = 'v %s/{ID}.md' % c.folder
     lines = [
-        'Write `%s/{ID}.md`. The filename is the bare ID: no slug, no date, no title.' % c.folder,
+        where,
         '',
         'Report as:',
         '',
         '```',
-        'v %s/{ID}.md' % c.folder,
+        report,
         '  {one-line summary}',
         '  status {status}  links {n}',
         '```',

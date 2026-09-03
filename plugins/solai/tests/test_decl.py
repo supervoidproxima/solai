@@ -23,8 +23,9 @@ import shutil
 import tempfile
 
 from lib import decl
+from lib.emit import cardskill, load_labels
 
-EXPECTED = 50
+EXPECTED = 61
 NAME = 'declarations'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -57,6 +58,16 @@ type    = "list<wl>"
 card    = "0..N"
 source  = "partition"
 '''
+
+# The same class named by slug rather than by its identifier. The `[view]` is not
+# decoration here: under `slug` the filename carries no number, so a view that cannot show
+# `id` cannot find a card, and the loader refuses that combination.
+CLASS_SLUG = CLASS_OK.replace(
+    'purpose   = "A fixture class."',
+    'purpose   = "A fixture class."\nfilename  = "slug"') + """
+[view]
+columns = ["file.name", "id", "title"]
+"""
 
 MANIFEST_OK = '''\
 schema    = 1
@@ -220,6 +231,38 @@ def group_class(s):
                  load(CLASS_OK + '\n[[links]]\nfield = "beta"\ntarget = "beta"\n'
                                  'kind = "lateral"\n'),
                  'Lateral means same-class')
+
+        cs = decl.load_class(_class(CLASS_SLUG, tmp, 'slugged'))
+        s.eq('DC-21', 'a class declaring `filename = "slug"` loads and the policy is read',
+             cs.filename, 'slug')
+
+        s.eq('DC-22', '`filename = "id"` normalises to `bare-id`: one word for one idea',
+             decl.load_class(_class(
+                 _swap(CLASS_OK, 'purpose   = "A fixture class."',
+                       'purpose   = "A fixture class."\nfilename  = "id"'),
+                 tmp, 'aliased')).filename,
+             'bare-id')
+
+        s.eq('DC-23', 'a class declaring no filename policy defaults to `bare-id`',
+             c.filename, 'bare-id')
+
+        s.raises('DC-24', 'an unknown filename policy is refused, naming the known ones',
+                 load(_swap(CLASS_SLUG, 'filename  = "slug"', 'filename  = "kebab"'), 'badpol'),
+                 ('filename policy', 'bare-id', 'slug'))
+
+        s.raises('DC-25', 'a slug class whose view names no `id` column is refused',
+                 load(CLASS_SLUG.replace('"file.name", "id", "title"', '"file.name", "title"'),
+                      'noid'),
+                 ('filename is `slug`', 'no `id` column'))
+
+        s.raises('DC-26', 'a misspelled class key is refused rather than silently read by nothing',
+                 load(_swap(CLASS_SLUG, 'filename  = "slug"', 'file-name = "slug"'), 'misspelt'),
+                 ('unknown key', "'file-name'", 'read by nothing'))
+
+        s.raises('DC-27', 'an unknown key on a field is refused, naming the field and the key',
+                 load(_swap(CLASS_OK, 'name     = "title"',
+                            'name     = "title"\nnotes    = "x"'), 'badfield'),
+                 ('field', "'notes'", 'unknown key'))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -244,8 +287,17 @@ def group_archetype(s):
              sorted(real) == ['minimal', 'personal', 'project', 'role'], repr(sorted(real)))
 
         counts = tuple(len(real[n].classes) for n in ('minimal', 'project', 'personal', 'role'))
-        s.eq('DA-03', 'the shipped class counts are 0 / 5 / 5 / 3, so nothing was swallowed',
-             counts, (0, 5, 5, 3))
+        # `role` is 2, not 3. `decision` is still declared in `archetypes/role/classes/` and
+        # is still installable, but it is no longer scaffolded: in the one real role vault it
+        # held zero cards after the whole archive had been read, while carrying a skill, a
+        # folder, a dictionary section and a row in CLAUDE.md. That is machinery on the
+        # document side of the ratio the package reports about itself (D16).
+        s.eq('DA-03', 'the shipped class counts are 0 / 5 / 5 / 2, so nothing was swallowed',
+             counts, (0, 5, 5, 2))
+
+        s.accepts('DA-31', 'a declared-but-unscaffolded class is still a loadable declaration',
+                  lambda: decl.load_class(os.path.join(
+                      PKG_ROOT, 'archetypes', 'role', 'classes', 'decision.toml')))
 
         s.ok('DA-30', 'every shipped archetype declares the opening line of its own places',
              all((real[n].defaults.get('remit') or '').strip()
@@ -434,4 +486,41 @@ def group_archetype(s):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-GROUPS = (group_class, group_archetype)
+# --------------------------------------------------------------------------- card skill
+
+def group_cardskill(s):
+    """The filename policy where it is actually consumed.
+
+    DS-01 is the assertion that would have caught the live bug: a skill generated for a
+    slug-named class told its reader to glob `duties/DTY-*.md`, which matches no file, so a
+    fresh run would have restarted the sequence at 001 over nineteen existing cards.
+    """
+    tmp = tempfile.mkdtemp(prefix='solai-test-cs-')
+    try:
+        L = load_labels(PKG_ROOT, 'en')
+        slug = decl.load_class(_class(CLASS_SLUG, tmp, 'slugged'))
+        bare = decl.load_class(_class(CLASS_OK, tmp))
+
+        sid = cardskill.step_id(slug, L)
+        s.ok('DS-01', 'a slug class is never told to mint from a glob over filenames',
+             '-*.md' not in sid and 'Glob' not in sid,
+             'step-id still reaches for a filename glob: ' + sid.split(chr(10))[0])
+
+        s.ok('DS-02', 'both policies mint by reading `id:`, and only bare-id keeps the glob '
+                      'as a cross-check',
+             'id: ALP-' in cardskill.step_id(bare, L)
+             and 'id: ALP-' in sid
+             and 'cross-check' in cardskill.step_id(bare, L)
+             and 'cross-check' not in sid,
+             repr(cardskill.step_id(bare, L)))
+
+        fields, write = cardskill.step_fields(slug, L), cardskill.step_write(slug, L)
+        s.ok('DS-03', 'a slug class requires `title` and `aliases` and writes a slug filename',
+             '`title`' in fields and '`aliases`' in fields
+             and '{slug}.md' in write and '{ID}.md' not in write,
+             repr(write.split(chr(10))[0]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+GROUPS = (group_class, group_archetype, group_cardskill)

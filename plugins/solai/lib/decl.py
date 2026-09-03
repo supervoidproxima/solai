@@ -27,6 +27,18 @@ LINK_KINDS = {'bidirectional', 'one-way', 'lateral', 'lookup'}
 CITE_STYLES = {'footnotes', 'inline-wikilink', 'none'}
 GOVERNANCE_TIERS = ('light', 'standard', 'governed')
 
+# How a card of this class is named on disk. `bare-id` makes the filename the identifier;
+# `slug` names the file for the thing and carries the identifier in `id`, repeated in
+# `aliases` so existing `[[PFX-NNN]]` citations still resolve. It is a per-class policy and
+# not a vault-wide one: the reason for choosing `slug` is that a graph view of sixteen nodes
+# reading DTY-001 to DTY-016 is useless for the one thing that view is for, and that reason
+# applies to the class whose cards are being looked at, not to every class beside it.
+FILENAME_POLICIES = {'bare-id', 'slug'}
+# `id` is accepted because it is the spelling already written into a shipped vault's
+# declaration, in a change record that is immutable. Normalised on load, so everything
+# downstream sees one word for one idea (D6).
+FILENAME_ALIASES = {'id': 'bare-id'}
+
 # An agent is a declared artefact of an archetype, exactly like a card class: one TOML in,
 # one projection out, and nothing in the engine core changes to carry it. These are its
 # declared vocabularies.
@@ -107,6 +119,8 @@ class CardClass(object):
         self.purpose = data.get('purpose', '')
         self.minted_by = data.get('minted_by') or ('skill:%s' % self.skill)
         self.archive_folder = data.get('archive_folder')
+        raw_filename = data.get('filename') or 'bare-id'
+        self.filename = FILENAME_ALIASES.get(raw_filename, raw_filename)
         st = data.get('status', {})
         self.lifecycle = st.get('lifecycle', [])
         self.terminal = st.get('terminal', [])
@@ -149,8 +163,40 @@ class CardClass(object):
         return None
 
 
+# Every key a class declaration may carry, at every level. Without this a declaration can
+# say `file-name = "slug"` - or `filename = "slug"` before this release - and be accepted and
+# read by nothing, which is the silent failure this loader exists to prevent. `[status.notes]`
+# is deliberately absent: it is keyed by status value, so its keys cannot be enumerated.
+CLASS_KEYS = {'schema', 'class', 'prefix', 'folder', 'skill', 'title', 'purpose',
+              'minted_by', 'archive_folder', 'filename', 'status', 'fields', 'links',
+              'body', 'view', 'card-skill'}
+STATUS_KEYS = {'lifecycle', 'terminal', 'default', 'notes', 'rules'}
+STATUS_RULES_KEYS = {'terminal_callout', 'terminal_relaxes_schema'}
+BODY_KEYS = {'required_h2', 'optional_h2', 'sources_h3', 'cite_style'}
+VIEW_KEYS = {'columns', 'sort'}
+VIEW_SORT_KEYS = {'property', 'direction'}
+CARD_SKILL_KEYS = {'modes', 'shared', 'rubrics', 'triggers', 'induces'}
+FIELD_KEYS = {'name', 'type', 'card', 'required', 'values', 'value_notes', 'meaning',
+              'derived_by', 'source', 'no_default', 'default'}
+LINK_KEYS = {'field', 'target', 'card', 'kind', 'reciprocal', 'meaning'}
+
+
 def _validate_class(c, errors):
     where = os.path.basename(c.path)
+    status_raw = c.raw.get('status', {})
+    view_raw = c.raw.get('view', {})
+    _unknown(where, 'the class', c.raw, CLASS_KEYS, errors)
+    _unknown(where, '`[status]`', status_raw, STATUS_KEYS, errors)
+    _unknown(where, '`[status.rules]`', status_raw.get('rules', {}), STATUS_RULES_KEYS, errors)
+    _unknown(where, '`[body]`', c.raw.get('body', {}), BODY_KEYS, errors)
+    _unknown(where, '`[view]`', view_raw, VIEW_KEYS, errors)
+    for s_ in view_raw.get('sort', []):
+        _unknown(where, 'view sort %r' % s_.get('property'), s_, VIEW_SORT_KEYS, errors)
+    _unknown(where, '`[card-skill]`', c.raw.get('card-skill', {}), CARD_SKILL_KEYS, errors)
+    for f_ in c.raw.get('fields', []):
+        _unknown(where, 'field %r' % f_.get('name'), f_, FIELD_KEYS, errors)
+    for l_ in c.raw.get('links', []):
+        _unknown(where, 'link %r' % l_.get('field'), l_, LINK_KEYS, errors)
     if not c.name:
         errors.append('%s: no `class` key. A declaration without a class name cannot be projected.' % where)
     if not c.prefix:
@@ -159,6 +205,9 @@ def _validate_class(c, errors):
         errors.append('%s: prefix %r must be uppercase letters only.' % (where, c.prefix))
     if not c.folder:
         errors.append('%s: no `folder`.' % where)
+    if c.filename not in FILENAME_POLICIES:
+        errors.append('%s: filename policy %r is unknown. Known: %s.'
+                      % (where, c.raw.get('filename'), ', '.join(sorted(FILENAME_POLICIES))))
     if not c.lifecycle and not c.terminal:
         errors.append('%s: no status values. A class with no lifecycle cannot satisfy D2.' % where)
     if c.status_default and c.status_default not in c.statuses:
@@ -209,6 +258,9 @@ def _validate_class(c, errors):
             continue
         if col not in seen and col not in ('tags', 'date', 'type', 'id', 'status', 'title'):
             errors.append('%s: view column %r is not a declared field or link.' % (where, col))
+    if c.filename == 'slug' and 'id' not in c.view_columns:
+        errors.append('%s: filename is `slug` and the view names no `id` column, so the one '
+                      'view built for finding a card cannot show its identifier.' % where)
 
 
 # --------------------------------------------------------------------------- agents

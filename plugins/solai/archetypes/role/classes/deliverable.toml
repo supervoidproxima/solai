@@ -77,12 +77,12 @@ meaning = "Which areas of the role it belongs to. Empty means it spans all of th
 # --------------------------------------------------------------------------- links
 
 [[links]]
-field      = "obligation"
-target     = "obligation"
+field      = "duty"
+target     = "duty"
 card       = "0..N"
 kind       = "bidirectional"
 reciprocal = "deliverable"
-meaning    = "What this discharges. Empty is legitimate and it is a finding: work that answers no obligation is either a duty nobody wrote down or work the role was never asked for, and the two need different conversations."
+meaning    = "What this discharges. Empty is legitimate and it is a finding: work that answers no duty is either one nobody wrote down or work the role was never asked for, and the two need different conversations."
 
 [[links]]
 field   = "related"
@@ -110,7 +110,7 @@ cite_style  = "footnotes"
 
 [view]
 columns = ["file.name", "artefact", "status", "to", "form", "due", "sent-on",
-           "obligation", "area", "tags"]
+           "duty", "area", "tags"]
 
 [[view.sort]]
 property  = "status"

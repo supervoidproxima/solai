@@ -78,11 +78,11 @@ meaning = "Which areas of the role it governs. Empty means all of them, which fo
 # --------------------------------------------------------------------------- links
 
 [[links]]
-field   = "obligation"
-target  = "obligation"
+field   = "duty"
+target  = "duty"
 card    = "0..N"
 kind    = "one-way"
-meaning = "What the decision was taken under. One-way: the child names the parent, and an obligation does not keep a list of every choice made beneath it."
+meaning = "What the decision was taken under. One-way: the child names the parent, and a duty does not keep a list of every choice made beneath it."
 
 [[links]]
 field   = "deliverable"
@@ -116,7 +116,7 @@ cite_style  = "footnotes"
 
 [view]
 columns = ["file.name", "decision", "status", "authority", "taken-on", "reversal-cost",
-           "displaces", "obligation", "area", "tags"]
+           "displaces", "duty", "area", "tags"]
 
 [[view.sort]]
 property  = "taken-on"

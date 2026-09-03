@@ -4,7 +4,7 @@ Four commands, all run from `~/.claude/solai/plugins/solai`. Run the first two a
 change; the last two run inside `verify_engine.py` and can also be pointed at a place by hand.
 
 ```
-python tests/run_tests.py                        # 178 assertions
+python tests/run_tests.py                        # 251 assertions
 python tests/verify_engine.py                    # four archetypes, applied twice, checked, probed
 python tests/check_workflow_js.py <place>        # every projected script is real JavaScript
 python tests/check_workflow_resume.py <place>    # every script replays identically
@@ -16,17 +16,26 @@ Each exits 0 only when green, so any of them can gate a commit.
 
 | Module | Assertions | Covers |
 |---|---:|---|
-| `test_primitives.py` | 45 | `fm` 14, `stamp` 11, `regions` 13, `fsplan` 7 |
-| `test_decl.py` | 49 | 20 on one class, 29 on an archetype set |
+| `test_primitives.py` | 62 | `fm` 14, `stamp` 11, `regions` 13, `fsplan` 8, materials 6, language 6, START-HERE 4 |
+| `test_decl.py` | 60 | 27 on one class, 30 on an archetype set, 3 on the card-skill emitter |
 | `test_agents.py` | 34 | 22 on an agent declaration, 12 on the agent emitter |
 | `test_workflows.py` | 34 | 22 on a workflow declaration, 12 on the workflow emitter |
 | `test_authoring.py` | 16 | the renderers, the manifest wiring, the refusals |
-| **total** | **178** | |
+| `test_ui.py` | 45 | 9 declarations, 6 the gate, 4 argv, 5 tier, 21 the page |
+| **total** | **251** | |
+
+This table was stale on 2026-09-03 - it named 178 against a suite of 241, omitted `test_ui.py`
+entirely, and understated `test_primitives.py` by 17. The counts above were read off the
+harness rather than copied forward, which is the only way a count in prose stays true.
 
 Every assertion carries a stable id, and the runner **refuses a run whose assertion count does
-not match the declared expectation** - a deleted assertion is a silently weakened gate, so 177 of
-178 passing is red for the same reason a failure is. Adding an assertion means raising `EXPECTED`
+not match the declared expectation** - a deleted assertion is a silently weakened gate,
+so 250 of 251 passing is red for the same reason a failure is. Adding an assertion means
+raising `EXPECTED`
 in the module that owns it. That friction is deliberate: the count is part of the gate.
+
+`DS-01` earned its place the same way: reintroducing the filename glob into `step_id` turned it
+and `DS-02` red, and nothing else in the suite noticed.
 
 ### Mutation-tested, not assumed
 

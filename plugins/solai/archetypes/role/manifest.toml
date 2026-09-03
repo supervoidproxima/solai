@@ -1,15 +1,23 @@
 schema    = 1
 archetype = "role"
 title     = "Role"
-summary   = "A role you have taken up: what it owes, what leaves because of it, and what you decided along the way. Three classes on one line - obligation, deliverable, decision - and a folder for the documents that impose the first."
+summary   = "A role you have taken up: what it owes, and what leaves because of it. Two classes on one line - duty, deliverable - and a folder for the documents that impose the first."
 
 # Top-level keys must precede the first table header. In TOML a bare key after `[ids]`
 # belongs to `ids`, and the failure is silent: the archetype loads with zero classes.
-classes = ["obligation", "deliverable", "decision"]
+classes = ["duty", "deliverable"]
+
+# `decision` is NOT here, and its declaration is still in `classes/`. It is offered by the
+# interview and installable on request; it is not built by default. In the one real role
+# vault it held zero cards after the whole archive had been read, while carrying a skill, a
+# folder, a data-dictionary section and a row in CLAUDE.md - machinery counted on the
+# document side of the ratio this package publishes about itself (D16). A class earns
+# scaffolding by having work in it, and the second such vault can say whether this one was
+# unusual.
 lookups = []
 
 # All four, plus the reader. A role is defined by documents it did not write and reads them
-# cold (scout, extractor); an obligation is a reading of a clause and someone senior may read
+# cold (scout, extractor); a duty is a reading of a clause and someone senior may read
 # it differently (refuter); and every deliverable is prose a person outside the place judges
 # (editor).
 #
@@ -19,16 +27,22 @@ lookups = []
 # its first day.
 agents = ["scout", "refuter", "extractor", "editor", "reader"]
 
-# Two. The constitutive documents arrive as a batch to be read down into obligations
+# Two. The constitutive documents arrive as a batch to be read down into duties
 # (intake), and everything that leaves is read by someone who did not write it (polish).
 # Review wants a standing body of findings to attack; a role has deliverables instead.
 workflows = ["intake", "polish"]
 
-# Three classes and no more, and they sit on one line: what is owed -> what left against it ->
-# what was decided doing it. A promise made to a person is NOT a fourth class - it is a
-# deliverable in `promised`, because a promise and the thing promised are one object at two
-# moments, and splitting them makes two cards with nothing comparing them (D3). Anything that
-# moves none of the three is a note in `sources/` or `people/`.
+# Two classes and they sit on one line: what is owed -> what left against it. A promise made
+# to a person is NOT a third class - it is a deliverable in `promised`, because a promise and
+# the thing promised are one object at two moments, and splitting them makes two cards with
+# nothing comparing them (D3). Anything that moves neither is a note in `sources/` or
+# `people/`.
+#
+# `deliverables/` is what the role can SHOW. It is not the whole of what the role DOES: the
+# first real vault of this archetype spent five days taking custody of an archive - naming,
+# registering, deduplicating, generating - and produced almost nothing that left. Calling
+# that folder "the only evidence the role produced anything" made all of it invisible, which
+# was a defect in the sentence and not in the work.
 
 [interview]
 asks = ["mode", "root", "name", "remit", "output_language",
@@ -38,14 +52,14 @@ asks = ["mode", "root", "name", "remit", "output_language",
 
 # `holder` and `succession` are asked before anything is built, because the answer to the
 # second changes what the vault is for. A role taken over from someone else does not begin
-# by reading its charter down into obligations: it begins by finding out whether a charter
+# by reading its charter down into duties: it begins by finding out whether a charter
 # exists at all. Most of what a successor inherits is a predecessor's practice, which is a
 # weaker thing than a clause and has to be recorded as such from the first card, not
 # retrofitted onto fifteen of them later.
 #
 # Not asking has a measured cost. In one vault the succession surfaced forty exchanges in,
 # by accident, when the annual plan turned out to name a different person throughout. Every
-# obligation card had to be reopened to say whose practice it recorded.
+# duty card had to be reopened to say whose practice it recorded.
 
 [interview.holder]
 prompt = "Who holds this role? The name seeds `people/`, and it is what separates your own work from your predecessor's in everything the vault reads later."
@@ -68,7 +82,7 @@ governance_tier = "standard"
 changes_folder  = "changes"
 
 [interview.partition]
-prompt  = "Optional. Short codes for your areas of responsibility - most people leave this blank until the obligations show what the areas actually are."
+prompt  = "Optional. Short codes for your areas of responsibility - most people leave this blank until the duties show what the areas actually are."
 example = ["METHOD", "SCHOOLS", "REPORTING"]
 binds   = "area"
 
@@ -95,14 +109,11 @@ purpose = "what constitutes the role: the job description, the order appointing 
 path = "plans"
 purpose = "what the role is measured against this period. Superseded rather than edited, so last year's target stays readable"
 [[folders]]
-path = "obligations"
+path = "duties"
 purpose = "one card per thing the role owes, each traced to the document or the instruction that imposes it"
 [[folders]]
 path = "deliverables"
-purpose = "one card per thing that leaves, promised or sent. The only evidence the role produced anything"
-[[folders]]
-path = "decisions"
-purpose = "one card per decision taken in the role, with the authority it was taken under"
+purpose = "one card per thing that leaves, promised or sent. What the role can show someone outside it"
 [[folders]]
 path = "sources"
 purpose = "what arrived from outside and informs the work without constituting the role. Read-only once onboarded"
@@ -214,7 +225,9 @@ id    = "scripts"
 path  = "_system/scripts/"
 mode  = "copied"
 from  = "runtime/"
-files = ["check_links.py", "stamp_check.py", "validate_cards.py", "gen_dashboard.py", "check_agents.py"]
+files = ["check_links.py", "stamp_check.py", "validate_cards.py",
+         "gen_dashboard.py", "check_agents.py", "check_binaries.py",
+         "measure_cards.py"]
 
 [[artefacts]]
 id       = "chg-001"
@@ -245,14 +258,14 @@ generated = ["meta", "script"]
 
 [[loop]]
 n = 1
-name = "read the constitutive documents down into obligations, one card per clause that binds"
-skill = "/obligation"
-out = "obligations/"
+name = "read the constitutive documents down into duties, one card per clause that binds"
+skill = "/duty"
+out = "duties/"
 [[loop]]
 n = 2
 name = "confirm the reading with whoever can say it is wrong"
-skill = "/obligation"
-out = "obligations/"
+skill = "/duty"
+out = "duties/"
 [[loop]]
 n = 3
 name = "promise one thing, to a named person, with a date"
@@ -265,21 +278,16 @@ skill = "/deliverable"
 out = "deliverables/"
 [[loop]]
 n = 5
-name = "record the decision the work forced, before anyone has to re-take it"
-skill = "/decision"
-out = "decisions/"
-[[loop]]
-n = 6
 name = "check links, statuses and stamps"
 skill = "/solai check"
 out = "_system/runs/"
 [[loop]]
-n = 7
-name = "name every standing obligation nothing left against this period. Silence is a state"
+n = 6
+name = "name every standing duty nothing left against this period. Silence is a state"
 skill = "-"
 out = "_system/runs/"
 [[loop]]
-n = 8
+n = 7
 name = "record what changed and why"
 skill = "/solai change"
 out = "changes/"

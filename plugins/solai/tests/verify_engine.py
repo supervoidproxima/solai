@@ -29,6 +29,20 @@ plan is entirely NOOP" is a statement about a plan.
 At 0.5.0 the agent layer added two rows per agent - the projection and the compiled
 declaration. At 0.6.0 the workflow layer does the same per workflow, giving 5 / 38 / 28 / 32.
 
+The `role` figure moved 34 -> 36 when the `reader` agent was added to that archetype: the
+documents constituting a role arrive as Word, Excel and PDF, and neither scout nor extractor
+can get words out of a deck. The declaration shipped and this table did not follow it, so the
+gate had been reporting a failure of its own bookkeeping as a failure of the engine.
+
+The three card archetypes moved again, by two each, when `check_binaries.py` and
+`measure_cards.py` joined the copied runtime: one plan row per copied file. `minimal`
+takes neither - it declares no class, so there are no cards to measure and nothing for
+the attachment conventions to be declared against.
+
+`role` then went 38 -> 36: `decision` is no longer scaffolded, so its compiled declaration
+and its card skill are not written. The declaration still ships and is still installable;
+it is the building of it by default that stopped.
+
 Two extra checkers run against any place that carries workflows: `check_workflow_js.py` proves
 each projection is real JavaScript with an evaluable `meta` literal, and
 `check_workflow_resume.py` replays each script twice with the runtime stubbed and demands an
@@ -51,11 +65,18 @@ SCAFFOLD = os.path.join(PKG, 'skills', 'solai-scaffold', 'scaffold.py')
 # archetype, output language, expected NOOP plan rows, agents projected, workflows projected.
 # Each agent and each workflow contributes two rows: the projection under `.claude/` and its
 # declaration compiled into `_system/os/`.
+# Gates a correctly built, empty place is SUPPOSED to raise. A gate is not an invalidity:
+# `validate_cards.py` exits non-zero on BLOCKER alone, and AV-2 says of itself that it "is
+# reported every run until it is not true". Demanding zero gates from a place that has by
+# construction shipped nothing is a category error, and it is why this file had been red:
+# three of the four archetypes failed on the one gate they are built to raise.
+FRESH_GATES = {'AV-3'}
+
 CASES = (
     ('minimal', 'en', 6, 0, 0),
-    ('project', 'en', 42, 5, 3),
-    ('personal', 'ru', 30, 2, 0),
-    ('role', 'en', 34, 4, 2),
+    ('project', 'en', 44, 5, 3),
+    ('personal', 'ru', 32, 2, 0),
+    ('role', 'en', 36, 5, 2),
 )
 
 ANSWERS = ('remit=A throwaway place built only to verify the engine.',
@@ -131,9 +152,16 @@ def main():
                 _, o = run([p, root])
                 if script == 'validate_cards.py':
                     b, g = num(r'BLOCKER (\d+)', o, -1), num(r'GATE (\d+)', o, -1)
-                    checks.append('BLOCKER %s GATE %s' % (b, g))
-                    if b != 0 or g != 0:
-                        failures.append('%s: %d BLOCKER, %d GATE' % (arch, b, g))
+                    gate_ids = set(re.findall(r'(?m)^\s+GATE\s+(\S+)', o))
+                    checks.append('BLOCKER %s GATE %s%s'
+                                  % (b, g, ' (%s)' % ', '.join(sorted(gate_ids))
+                                     if gate_ids else ''))
+                    if b != 0:
+                        failures.append('%s: %d BLOCKER' % (arch, b))
+                    unexpected = gate_ids - FRESH_GATES
+                    if unexpected:
+                        failures.append('%s: unexpected gate %s on a freshly built place'
+                                        % (arch, ', '.join(sorted(unexpected))))
                 elif script == 'stamp_check.py':
                     st = num(r'stamped files: (\d+)', o, -1)
                     cl = num(r'clean: (\d+)', o, -1)

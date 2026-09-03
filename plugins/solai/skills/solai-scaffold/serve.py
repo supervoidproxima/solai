@@ -80,7 +80,7 @@ INERT = {
                         'vault whose own files are Russian.'),
     'partition': ('set later, not at setup',
                   'The codes are whatever areas the work turns out to have, and they read out '
-                  'of the obligations once those exist. Guessed now, the guess sits in every '
+                  'of the duties once those exist. Guessed now, the guess sits in every '
                   'card that follows. The command line takes it for a vault that already '
                   'knows its own divisions.'),
     'classes': ('declared by the archetype',

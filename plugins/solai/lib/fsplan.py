@@ -103,7 +103,7 @@ class Plan(object):
 
     def mkdir(self, rel, artefact='folders'):
         # A folder is created once. Two callers can legitimately ask for the same one - a
-        # manifest declaring `obligations` and the class that lives in it - and a plan that
+        # manifest declaring `duties` and the class that lives in it - and a plan that
         # printed the row twice would report a count the filesystem never performs.
         for a in self.actions:
             if a.kind == MKDIR and a.rel == rel:

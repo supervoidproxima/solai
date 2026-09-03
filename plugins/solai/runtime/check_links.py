@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Broken wikilinks and orphans.
+"""Broken wikilinks, and what nothing points at.
 
     py _system/scripts/check_links.py <vault-root> [--orphans] [--json]
 
@@ -7,7 +7,14 @@ Obsidian resolves `[[name]]` by filename, not by path, so a link survives a fold
 breaks on a rename. That asymmetry is why this runs after any structural change: the moves
 are safe and the renames are not, and nothing else tells you which happened.
 
-Ported from a working vault script. Exit 1 on any broken link.
+THE WORD "ORPHAN" IS NOT REPORTED HERE. It ran together two different facts - a note nothing
+links to, and a note nothing can reach - and a `.base` view lists notes without wikilinking
+them, so every note a view showed was being counted as unreachable. In one vault that made
+383 orphans of which 326 were not orphans at all. A count that is 85% noise is a count
+nobody acts on, so the small honest number is reported first and the reachable ones after.
+
+Exit 1 on a broken link only. A note nothing points at is a fact about the graph, not a
+failure: a freshly built vault is full of them and its checker should not be red.
 """
 import io
 import json
@@ -21,11 +28,76 @@ SKIP_DIRS = {'.obsidian', '.trash', '.git', 'node_modules', '__pycache__', '.cla
 LINK = re.compile(r'\[\[([^\]|#^]+)(?:[#^][^\]|]*)?(?:\|[^\]]*)?\]\]')
 CODE_FENCE = re.compile(r'```.*?```', re.S)
 INLINE_CODE = re.compile(r'`[^`\n]*`')
+# `lib/emit/bases.py` writes exactly `- type == "duty"`. A filter this cannot parse simply
+# does not answer the one question asked here - does a view list notes of this type - and
+# no view is ever treated as making a note unreachable.
+BASE_TYPE = re.compile(r'type\s*==\s*"([^"]+)"')
+FM_TYPE = re.compile(r'(?m)^type:[ \t]*["\']?([A-Za-z0-9_-]+)')
+HEAD = 8192
+QUOTES = '"' + "'"
+# Not attachments, so not reported as unreferenced ones. A note is counted separately, a
+# `.base` IS the view rather than a thing a view should point at, and an `.html` here is a
+# rendered projection of the vault: nothing should link to a dashboard, and reporting it
+# every run is how a checker teaches people to skip its last line. Dotfiles are excluded
+# for the same reason - repo plumbing is not an attachment anyone forgot to describe.
+NOT_ATTACHMENTS = ('.md', '.base', '.html')
+
+
+def _head(path):
+    try:
+        with io.open(path, encoding='utf-8') as fh:
+            return fh.read(HEAD)
+    except (OSError, UnicodeDecodeError):
+        return ''
+
+
+def aliases_of(text):
+    """Every alias a note answers to.
+
+    Obsidian resolves a wikilink against `aliases:` as well as against the filename, so an
+    index built from filenames alone calls a working citation broken. Moving one class to
+    slug filenames left 253 citations resolving through aliases and nothing else.
+
+    Only the head of the file is read: frontmatter is at the top by definition.
+    """
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        if not line.startswith('aliases:'):
+            continue
+        rest = line[len('aliases:'):].strip()
+        if rest.startswith('[') and rest.endswith(']'):
+            inner = rest[1:-1].strip()
+            return [x.strip().strip(QUOTES) for x in inner.split(',') if x.strip()]
+        out = []
+        for nxt in lines[i + 1:]:
+            if nxt.startswith((' ', '\t')):
+                m = re.match(r'^\s*-\s+(.*?)\s*$', nxt)
+                if m:
+                    out.append(m.group(1).strip().strip(QUOTES))
+            elif nxt.strip():
+                break
+        return out
+    return []
+
+
+def base_types(root):
+    """Every note `type` that some `.base` view lists.
+
+    A view is reachability. It is not a wikilink, so nothing in the link graph records it,
+    and treating the notes it shows as unreachable is the mistake this exists to prevent.
+    """
+    types = set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        for name in filenames:
+            if name.endswith('.base'):
+                types.update(BASE_TYPE.findall(_head(os.path.join(dirpath, name))))
+    return types
 
 
 def index(root):
-    """filename stem (and full relative path) to real path."""
-    by_name, all_files = {}, []
+    """Every name a wikilink may resolve to, the files, and the head of each note."""
+    by_name, all_files, heads = {}, [], {}
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for name in filenames:
@@ -41,11 +113,16 @@ def index(root):
             # it out reported every citation to a PDF or DOCX as broken, which trains
             # people to ignore this checker.
             by_name.setdefault(rel, []).append(rel)
-    return by_name, all_files
+            if rel.endswith('.md'):
+                heads[rel] = _head(path)
+                for alias in aliases_of(heads[rel]):
+                    by_name.setdefault(alias, []).append(rel)
+    return by_name, all_files, heads
 
 
 def scan(root):
-    by_name, all_files = index(root)
+    by_name, all_files, heads = index(root)
+    views = base_types(root)
     broken, inbound = [], {}
     for rel in all_files:
         if not rel.endswith('.md'):
@@ -68,32 +145,57 @@ def scan(root):
                 else:
                     for h in hits:
                         inbound[h] = inbound.get(h, 0) + 1
-    orphans = [f for f in all_files
-               if f.endswith('.md') and f not in inbound
-               and not f.startswith('_system/') and f != 'CLAUDE.md']
-    return broken, orphans, len(all_files)
+
+    no_inbound = [f for f in all_files
+                  if f.endswith('.md') and f not in inbound
+                  and not f.startswith('_system/') and f != 'CLAUDE.md']
+    listed, unreachable = [], []
+    for f in no_inbound:
+        m = FM_TYPE.search(heads.get(f, ''))
+        (listed if (m and m.group(1) in views) else unreachable).append(f)
+    # The half `.md`-only scanning leaves out: a binary nothing points at is invisible to a
+    # link check that reports only on notes, and a vault built on an archive is mostly
+    # binaries. Whether one is DESCRIBED is a different question, asked by check_binaries.py.
+    attachments = [f for f in all_files
+                   if not f.endswith(NOT_ATTACHMENTS) and f not in inbound
+                   and not f.startswith('_system/')
+                   and not os.path.basename(f).startswith('.')]
+    return {'broken': broken, 'no-inbound': no_inbound, 'listed-in-a-base': listed,
+            'unreachable': unreachable, 'attachments-unreferenced': attachments,
+            'files': len(all_files)}
 
 
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     root = os.path.abspath(args[0]) if args else os.getcwd()
-    broken, orphans, total = scan(root)
+    r = scan(root)
+    broken = r['broken']
     if '--json' in sys.argv:
-        print(json.dumps({'broken': broken, 'orphans': orphans, 'files': total},
-                         ensure_ascii=False, indent=2))
+        print(json.dumps(r, ensure_ascii=False, indent=2))
         return 1 if broken else 0
-    print('files %d   broken links %d   orphans %d' % (total, len(broken), len(orphans)))
+    print('files %d   broken links %d   no inbound wikilink %d'
+          % (r['files'], len(broken), len(r['no-inbound'])))
+    print('  reachable through nothing       %d' % len(r['unreachable']))
+    print('  listed in a base view           %d' % len(r['listed-in-a-base']))
+    print('  attachments nothing points at   %d' % len(r['attachments-unreferenced']))
     for b in broken[:60]:
         print('  BROKEN  %s:%d  ->  [[%s]]' % (b['from'], b['line'], b['target']))
     if len(broken) > 60:
         print('  ... and %d more' % (len(broken) - 60))
     if '--orphans' in sys.argv:
-        for o in orphans[:60]:
-            print('  ORPHAN  %s' % o)
-        if len(orphans) > 60:
-            print('  ... and %d more' % (len(orphans) - 60))
-    elif orphans:
-        print('  (%d orphans, run with --orphans to list them)' % len(orphans))
+        # The honest number first, in full. The rest are a backlog to read, not defects.
+        for o in r['unreachable']:
+            print('  UNREACHABLE  %s' % o)
+        for o in r['listed-in-a-base'][:60]:
+            print('  IN A VIEW    %s' % o)
+        if len(r['listed-in-a-base']) > 60:
+            print('  ... and %d more listed in a view' % (len(r['listed-in-a-base']) - 60))
+        for o in r['attachments-unreferenced'][:60]:
+            print('  ATTACHMENT   %s' % o)
+        if len(r['attachments-unreferenced']) > 60:
+            print('  ... and %d more attachments' % (len(r['attachments-unreferenced']) - 60))
+    elif r['unreachable'] or r['attachments-unreferenced']:
+        print('  (run with --orphans to list them)')
     return 1 if broken else 0
 
 

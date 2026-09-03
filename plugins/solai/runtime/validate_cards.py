@@ -102,6 +102,28 @@ def fm_list(fm, key):
     return out
 
 
+def aliases_of(path, cap=8192):
+    """Every alias a note answers to.
+
+    Obsidian resolves `[[name]]` against `aliases:` as well as against the filename, so an
+    index built from filenames alone reports a working citation as broken. That is not a
+    theoretical case: moving one class to slug filenames left 253 `[[DTY-NNN]]` citations
+    resolving through aliases and nothing else.
+
+    Only the head of the file is read. Frontmatter is at the top by definition, and a vault
+    has thousands of notes.
+    """
+    try:
+        with io.open(path, encoding='utf-8') as fh:
+            head = fh.read(cap)
+    except (OSError, UnicodeDecodeError):
+        return ()
+    fm, _ = split_fm(head)
+    if fm is None:
+        return ()
+    return tuple(a for a in (fm_list(fm, 'aliases') or []) if a)
+
+
 def fm_keys(fm):
     if not fm:
         return []
@@ -122,6 +144,11 @@ class Decl(object):
         self.folder = data.get('folder')
         self.skill = data.get('skill') or self.name
         self.minted_by = data.get('minted_by')
+        # How a card is named on disk: `bare-id` or `slug`. `id` is the spelling one
+        # shipped vault already uses, normalised here so the families below compare
+        # against one word (D6).
+        fn = data.get('filename') or 'bare-id'
+        self.filename = 'bare-id' if fn == 'id' else fn
         st = data.get('status', {})
         self.lifecycle = st.get('lifecycle', [])
         self.terminal = st.get('terminal', [])
@@ -170,8 +197,19 @@ def load_cards(root, decls):
                     continue
                 fm, body = split_fm(text)
                 rel = os.path.relpath(path, root).replace(os.sep, '/')
+                stem = os.path.splitext(name)[0]
+                # A card is addressable by every name that resolves to it: its filename, its
+                # `id`, and every alias. Under `filename = "slug"` the stem is none of the
+                # identifiers, so a check that reads identity off the filename reports every
+                # card in the folder as broken.
+                cid = fm_scalar(fm, 'id') if fm is not None else None
+                names = {stem}
+                if cid:
+                    names.add(cid)
+                if fm is not None:
+                    names |= set(fm_list(fm, 'aliases') or [])
                 cards[rel] = {'class': c, 'fm': fm, 'body': body, 'name': name,
-                              'stem': os.path.splitext(name)[0],
+                              'stem': stem, 'id': cid, 'names': names,
                               'archived': '/archive/' in rel}
     return cards
 
@@ -181,8 +219,12 @@ def load_cards(root, decls):
 def fam_CL(cards, decls, add):
     for rel, card in cards.items():
         c, fm, body = card['class'], card['fm'], card['body']
-        rx = r'^%s-\d{3}$' % c.prefix
-        if not re.match(rx, card['stem']):
+        slug = c.filename == 'slug'
+        if slug:
+            if not re.match(r'^[a-z0-9]+(?:-[a-z0-9]+)*$', card['stem']):
+                add('CL-1', BLOCKER, rel, 'filename is not a kebab slug')
+                continue
+        elif not re.match(r'^%s-\d{3}$' % c.prefix, card['stem']):
             add('CL-1', BLOCKER, rel, 'filename is not %s-NNN' % c.prefix)
             continue
         if fm is None:
@@ -191,9 +233,18 @@ def fam_CL(cards, decls, add):
         if fm_scalar(fm, 'type') != c.name:
             add('CL-2', BLOCKER, rel, 'type is %r, expected %r'
                 % (fm_scalar(fm, 'type'), c.name))
-        if fm_scalar(fm, 'id') != card['stem']:
-            add('CL-3', BLOCKER, rel, 'id %r does not match the filename'
-                % fm_scalar(fm, 'id'))
+        if slug:
+            # Two separate blockers on purpose: "no identifier" and "identifier not aliased"
+            # are different repairs, and the second is the one that silently breaks every
+            # `[[PFX-NNN]]` citation already written elsewhere in the vault.
+            if not re.match(r'^%s-\d{3}$' % c.prefix, card['id'] or ''):
+                add('CL-3', BLOCKER, rel, 'id %r is not %s-NNN, and the filename is a slug, '
+                    'so the card has no identifier' % (card['id'], c.prefix))
+            elif card['id'] not in (fm_list(fm, 'aliases') or []):
+                add('CL-3', BLOCKER, rel, 'id %s is not in `aliases`, so every [[%s]] '
+                    'citation resolves to nothing' % (card['id'], card['id']))
+        elif card['id'] != card['stem']:
+            add('CL-3', BLOCKER, rel, 'id %r does not match the filename' % card['id'])
         status = fm_scalar(fm, 'status')
         if c.statuses:
             if status is None:
@@ -239,7 +290,8 @@ def fam_CL(cards, decls, add):
 def fam_LK(cards, decls, add, all_stems):
     by_id = {}
     for rel, card in cards.items():
-        by_id[card['stem']] = (rel, card)
+        for n in card['names']:
+            by_id[n] = (rel, card)
     for rel, card in cards.items():
         c, fm = card['class'], card['fm']
         if fm is None:
@@ -266,7 +318,7 @@ def fam_LK(cards, decls, add, all_stems):
                     if not other:
                         continue
                     back = fm_list(other[1]['fm'], l['reciprocal']) or []
-                    if not any(wl_target(b) == card['stem'] for b in back):
+                    if not any(wl_target(b) in card['names'] for b in back):
                         add('LK-1', BLOCKER, rel,
                             '%s -> [[%s]] has no reciprocal %s.%s pointing back'
                             % (l['field'], t, l['target'], l['reciprocal']))
@@ -278,12 +330,15 @@ def fam_ID(cards, decls, add):
         if c.prefix in minters and minters[c.prefix] != c.minted_by:
             add('ID-4', BLOCKER, c.folder, 'prefix %s is minted by two classes' % c.prefix)
         minters[c.prefix] = c.minted_by
+    # Keyed by identifier, not by filename. Under a slug policy two cards can share no
+    # filename and still share an id, which is the collision that actually matters: the
+    # filenames are merely different, the identifier is what everything else cites.
     seen = {}
     for rel, card in cards.items():
-        stem = card['stem']
-        if stem in seen:
-            add('ID-1', BLOCKER, rel, 'id %s also used by %s' % (stem, seen[stem]))
-        seen[stem] = rel
+        key = card['id'] or card['stem']
+        if key in seen:
+            add('ID-1', BLOCKER, rel, 'id %s also used by %s' % (key, seen[key]))
+        seen[key] = rel
     for c in decls.values():
         nums = sorted(int(s.split('-')[1]) for s in seen
                       if re.match(r'^%s-\d{3}$' % c.prefix, s))
@@ -366,7 +421,23 @@ def fam_VC(root, cards, decls, add):
                 add('VC-3', GATE, rel, 'key %r uses an underscore; keys are kebab-case' % k)
 
 
-def fam_AV(root, cards, add):
+# The class whose cards record what leaves. Hardcoding a prefix is a known weakness: a
+# class ought to declare that it is the thing that leaves, and until it does, this
+# constant is at least one place to change rather than three.
+DELIVERABLE_PREFIX = 'DLV'
+
+
+def fam_AV(root, cards, add, decls=None):
+    """The anti-avoidance family.
+
+    AV-3 counts what has left. It can only do that where the vault declares a class that
+    carries the leaving, and where it does not, the honest report is that the question does
+    not apply here - not a zero. A zero reads as a finding, and a finding that no work can
+    ever clear is a broken circuit reported as a fact about the work. One shipped vault ran
+    for four days being told `0 deliverables promised, 0 sent` over a class it had retired
+    and a folder it had deleted, and three of the four shipped archetypes have never
+    declared the class at all.
+    """
     system = content = 0
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and d != '.claude']
@@ -382,7 +453,7 @@ def fam_AV(root, cards, add):
     # because its status says so: a status is set by hand, a date has to be one.
     shipped = promised = 0
     for rel, card in cards.items():
-        if getattr(card['class'], 'prefix', '') != 'DLV':
+        if getattr(card['class'], 'prefix', '') != DELIVERABLE_PREFIX:
             continue
         promised += 1
         if (fm_scalar(card['fm'], 'sent-on') or '').strip():
@@ -401,7 +472,19 @@ def fam_AV(root, cards, add):
     # AV-2 counts markdown, and markdown is easy to generate. A vault can silence
     # it by writing notes about itself without anything reaching a recipient, which
     # is the avoidance the family is named for. This counts the only honest number.
-    if shipped == 0:
+    carrier = None
+    if decls is not None:
+        carrier = next((c for c in decls.values()
+                        if getattr(c, 'prefix', '') == DELIVERABLE_PREFIX), None)
+    if decls is not None and carrier is None:
+        # D13: absence is a value. The denominator is missing, so the ratio is not zero,
+        # it is undefined, and saying so is the only reading that cannot be mistaken for
+        # a measurement.
+        add('AV-3', GATE, '.',
+            'not applicable: this vault declares no `%s` class, so nothing here is '
+            'counted as leaving. Declare one, or accept that what this vault produces '
+            'is not measured' % DELIVERABLE_PREFIX)
+    elif shipped == 0:
         add('AV-3', GATE, '.',
             '%d content files, %d deliverables promised, 0 sent. Nothing has left this '
             'place. Writing more of it will not change that number'
@@ -425,11 +508,16 @@ def run(root, families=None):
 
     decls = load_decls(root)
     cards = load_cards(root, decls)
+    # Every name a wikilink could legitimately resolve to: filenames, and the aliases any
+    # note answers to. LK-2 calls a citation broken on the strength of this set, so a name
+    # missing from it is reported as a defect in the vault rather than a hole in the index.
     all_stems = set()
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for f in filenames:
             all_stems.add(os.path.splitext(f)[0])
+            if f.endswith('.md'):
+                all_stems.update(aliases_of(os.path.join(dirpath, f)))
 
     want = (lambda f: families is None or f in families)
     if want('CL'):
@@ -442,7 +530,7 @@ def run(root, families=None):
         fam_GN(root, add)
     if want('VC'):
         fam_VC(root, cards, decls, add)
-    counts = fam_AV(root, cards, add) if want('AV') else {}
+    counts = fam_AV(root, cards, add, decls) if want('AV') else {}
     return findings, {'classes': len(decls), 'cards': len(cards), 'counts': counts}
 
 
