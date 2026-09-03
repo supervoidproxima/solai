@@ -87,13 +87,40 @@ def language(L, answers):
     return '\n'.join(lines)
 
 
-def naming(L, answers):
+def card_naming_rows(classes):
+    """How cards are named, one row per policy in use.
+
+    Derived rather than asserted. A vault may be mixed - one class named by slug because a
+    graph view of sixteen nodes reading DTY-001 to DTY-016 is useless for the one thing that
+    view is for, and another kept on bare identifiers - so a single hardcoded row is wrong
+    for that vault and cannot be corrected from inside it.
+    """
+    if not classes:
+        return []
+    bare = [c for c in classes if getattr(c, 'filename', 'bare-id') != 'slug']
+    slug = [c for c in classes if getattr(c, 'filename', 'bare-id') == 'slug']
+    rows = []
+    if bare:
+        label = 'Card' if not slug else 'Card (%s)' % ', '.join(c.name for c in bare)
+        rows.append([label, 'bare ID', '`%s-001.md`' % bare[0].prefix])
+    if slug:
+        label = 'Card' if not bare else 'Card (%s)' % ', '.join(c.name for c in slug)
+        rows.append([label,
+                     '`slug.md`, named for the thing. The identifier lives in `id` and is '
+                     'repeated in `aliases`',
+                     '`a-name-for-the-thing.md`'])
+    return rows
+
+
+def naming(L, answers, classes=()):
     policy = (answers.get('filename_language') or 'english').strip()
     content = language_names(language_list(answers, 'content_languages',
                                            (answers.get('output_language') or 'en',)))
     rows = [['Dated note', '`YYYY-MM-DD-slug.md`', '`2026-08-27-budget-cycle-review.md`'],
             ['Undated note', '`slug.md`', '`budget-cycle-review.md`'],
-            ['Card', 'bare ID', '`GAP-001.md`'],
+            ]
+    rows += card_naming_rows(classes)
+    rows += [
             ['Folder', '`slug/`', '`registry/`, `_system/`'],
             ['Frontmatter key', '`kebab-case`', '`demand-voices`'],
             ['Tag', '`kebab-case`', '`budget-cycle`']]
@@ -188,7 +215,11 @@ def frontmatter(L, arch, classes):
         [code('tags'), 'list', L('dd.no'), 'closed list in `_system/vocabulary.md`. `[]` is normal'],
     ]
     if classes:
-        rows.insert(2, [code('id'), 'text', 'cards', 'matches the filename'])
+        slug = [c for c in classes if getattr(c, 'filename', 'bare-id') == 'slug']
+        rows.insert(2, [code('id'), 'text', 'cards',
+                        'matches the filename' if not slug else
+                        'the identifier. It matches the filename except on %s, which '
+                        'is named by slug' % ', '.join(code(c.name) for c in slug)])
         rows.insert(3, [code('status'), 'enum', 'cards', 'see the status matrix'])
     return '\n'.join([
         '## %s' % L('claude.frontmatter'),
@@ -233,7 +264,7 @@ def render_generated(L, arch, classes, answers, extra_folders=()):
         'loop': loop(L, arch),
         'structure': structure(L, arch, extra_folders),
         'frontmatter': frontmatter(L, arch, classes),
-        'naming': naming(L, answers),
+        'naming': naming(L, answers, classes),
         'citation': citation(L, classes),
     }
     return {k: v for k, v in out.items() if v}

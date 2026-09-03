@@ -23,7 +23,10 @@ def keys_region(classes, arch, L):
         [code('aliases'), 'notes', 'other names this note answers to'],
     ]
     if classes:
-        rows += [[code('id'), 'cards', 'matches the filename'],
+        slug = [c for c in classes if getattr(c, 'filename', 'bare-id') == 'slug']
+        rows += [[code('id'), 'cards',
+                  'matches the filename' if not slug else
+                  'the identifier, and on a slug-named class the only one'],
                  [code('status'), 'cards', 'see the status matrix']]
     seen = {r[0] for r in rows}
     for c in classes:
