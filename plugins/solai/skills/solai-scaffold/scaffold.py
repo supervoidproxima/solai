@@ -258,6 +258,25 @@ def main():
     answers.setdefault('first_artefact', first_default)
     answers.setdefault('changes_folder', arch.defaults.get('changes_folder', 'changes'))
 
+    # The interview asks where the work already lives, on the grounds that "counting what
+    # already exists is the difference between a plan and a guess". Until this it asked and
+    # discarded the answer, so the count existed once in a conversation and nowhere after.
+    # It is recorded in the bond, beside the bootstrap ratio it puts in proportion: thirty
+    # system files against zero content reads very differently next to a corpus of 2130.
+    corpus = (answers.get('corpus') or '').strip()
+    if corpus and os.path.isdir(fsplan.w(corpus)):
+        n = 0
+        for _dir, dirnames, filenames in os.walk(fsplan.w(corpus)):
+            dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+            n += len([f for f in filenames if not f.startswith('.')])
+        answers['corpus_files'] = n
+        print('  corpus: %d files at %s' % (n, corpus))
+    elif corpus:
+        # D13: absence is a value. A path that is not there is reported, never counted as 0.
+        answers['corpus_files'] = 'Unknown'
+        print('  corpus: %s is not a directory this machine can see. Recorded as Unknown.'
+              % corpus)
+
     if o['mode'] in ('diff', 'adopt'):
         return region_mode(root, PKG, answers, arch, o)
 

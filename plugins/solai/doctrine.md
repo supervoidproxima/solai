@@ -5,6 +5,9 @@ that learned them the expensive way: `Fangorn` (a personal life-OS that grew a
 constitution, an org chart and an adversarial judge) and a consulting project vault
 (which grew card registries, closed vocabularies and a verification constitution).
 
+D19 came later and from a different place: the first vault this package built, five days
+into running, having destroyed documents it could not get back.
+
 **This file ships with the package and is never copied into a vault.** A vault holds only
 principle IDs and its waivers. That way a doctrine change can never conflict with local
 content: the worst case is a waiver pointing at a principle that no longer exists, which
@@ -38,8 +41,11 @@ That asymmetry is the whole point of the ranking.
 | **D16** | **Machinery is not progress, and the ratio is published.** Documents authored against artefacts shipped, over a window, against a declared bar. A tool's own output counts on the document side of the ratio it reports and may not be argued out of that column. | The pathology both source vaults exhibited. Fangorn's own verdict, computed not felt: 49 documents to 4 artefacts. | Fangorn counsel | CORE |
 | **D17** | **Refuse ambiguity by naming the candidates.** A router that guesses writes into the wrong place. A refusal states the case, lists the candidates, and asks the one question that resolves it. Check the delegations before declaring a conflict: a grant is design, not collision. | Writing into the wrong owner's files, or refusing the only mechanism that could have moved the work. | Fangorn routing | CORE |
 | **D18** | **A stranger orients in five minutes, and every artefact type names a live exemplar.** One file answers what is canon, what is decided, what is next, and points at a real example per class. Its own update triggers are enumerated inside it. | Conventions re-derived from scratch each session, then re-derived differently. | NIS `STATE.md` and `DATA-MAP.md` | CORE |
+| **D19** | **Nothing is deleted by a script, and release is a person's own act.** Copy to a holding place, verify both ends by hash, and let the holder release it. Test the copy, not the name: a size, a filename or a type is evidence about a file, never a substitute for opening it. Selection for deletion runs on per-file evidence, never on a field that describes what a file is ABOUT rather than how many things it covers. | Irreversible loss dressed as tidying. In one vault a size comparison rather than an open declared a recoverable year lost, 139 bytes apart; a bulk rule read a subject field as a scope field and destroyed twelve documents, nine with no copy anywhere, six of them held back that same day for the postholder; and of 312 files sent to trash, 199 ceased to exist anywhere. | CORE |
 
-**Core, and therefore present even in a minimal vault (11):** D1, D2, D3, D6, D7, D9, D10, D13, D16, D17, D18. Each is cheap, and each prevents a failure that costs more than the rule.
+**Core, and therefore present even in a minimal vault (12):** D1, D2, D3, D6, D7, D9, D10, D13, D16, D17, D18, D19. Each is cheap, and each prevents a failure that costs more than the rule.
+
+D19 is the only one added from a vault that was running rather than from one being read. It is CORE because it is the one principle here whose failure cannot be answered by the next change record: everything else in this table protects a claim, and D19 protects the evidence.
 
 ---
 

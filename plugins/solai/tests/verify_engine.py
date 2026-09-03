@@ -47,6 +47,10 @@ Every archetype then gained one more row: `_system/os/manifest.toml`, the last p
 declaration to be compiled into the vault. With it a place can be regenerated from its own
 declarations rather than only validated against them.
 
+The three card archetypes gained one more: `_system/scripts/readme.md`, the run-order
+contract `CLAUDE.md` had promised since the first release and the package had never
+shipped. `minimal` does not take it, for the same reason it takes no `state.md`.
+
 Two extra checkers run against any place that carries workflows: `check_workflow_js.py` proves
 each projection is real JavaScript with an evaluable `meta` literal, and
 `check_workflow_resume.py` replays each script twice with the runtime stubbed and demands an
@@ -78,9 +82,9 @@ FRESH_GATES = {'AV-3'}
 
 CASES = (
     ('minimal', 'en', 7, 0, 0),
-    ('project', 'en', 45, 5, 3),
-    ('personal', 'ru', 33, 2, 0),
-    ('role', 'en', 37, 5, 2),
+    ('project', 'en', 46, 5, 3),
+    ('personal', 'ru', 34, 2, 0),
+    ('role', 'en', 38, 5, 2),
 )
 
 ANSWERS = ('remit=A throwaway place built only to verify the engine.',

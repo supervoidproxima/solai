@@ -56,12 +56,22 @@ def render(answers, arch, classes, tier, counts, package_version, waivers=(), su
             ['system files written by the package', counts.get('system', 0)],
             ['skills written by the package', counts.get('skills', 0)],
             ['card classes', len(classes)],
-        ]),
+        ] + ([['files already in the corpus', a.get('corpus_files')],
+              ['where the corpus is', code(a.get('corpus'))]]
+             if a.get('corpus') else [])),
         '',
         ('Bootstrap ratio %d system to %d content. This package declares '
          '`induces: authoring-instead-of-shipping`, and its own output counts on the system '
          'side of the ratio it reports. It may not be argued out of that column.'
          % (counts.get('system', 0), counts.get('content', 0))),
+        '',
+        # A vault starts empty and the work does not. Counting what already exists is
+        # what makes the ratio above a measurement rather than a boast: 30 system
+        # files against 0 content reads very differently beside a corpus of 2130.
+        ('The corpus is what this role already produced before the vault existed. It '
+         'is counted here so the bootstrap ratio is read next to it, and so nobody '
+         'later mistakes an empty vault for an empty role.'
+         if a.get('corpus') else ''),
         '',
         '## Classes',
         '',

@@ -21,6 +21,15 @@ def keys_region(classes, arch, L):
         [code('tags'), 'every file', 'closed list below. `[]` is normal'],
         [code('title'), 'notes', 'human-readable title, so the filename can stay a slug'],
         [code('aliases'), 'notes', 'other names this note answers to'],
+        # `check_binaries.py` reads both by default, so they are declared here or the
+        # checker is reading keys the closed set does not contain (D1). A note carrying
+        # `file:` stands for one document; one carrying `folder:` covers everything in a
+        # directory, which is how a set of a hundred scans gets described once instead of
+        # a hundred times.
+        [code('file'), 'notes beside a document',
+         'quoted wikilink to the binary this note describes, with its extension'],
+        [code('folder'), 'notes describing a set',
+         'plain path, deliberately not a wikilink: it names a directory, not a note'],
     ]
     if classes:
         slug = [c for c in classes if getattr(c, 'filename', 'bare-id') == 'slug']

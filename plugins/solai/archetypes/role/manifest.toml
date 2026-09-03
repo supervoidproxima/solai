@@ -187,6 +187,12 @@ mode    = "generated"
 emitter = "bond"
 
 [[artefacts]]
+id       = "scripts-readme"
+path     = "_system/scripts/readme.md"
+mode     = "seeded"
+fragment = "system/scripts-readme.md"
+
+[[artefacts]]
 id      = "state"
 path    = "_system/state.md"
 mode    = "seeded"

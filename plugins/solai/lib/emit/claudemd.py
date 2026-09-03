@@ -144,7 +144,25 @@ def naming(L, answers, classes=()):
     out += ['The date prefix uses the same hyphen as the rest, so the whole filename is one '
             'kebab string and the date is always the first ten characters. Human-readable '
             'titles live in frontmatter `title:` and `aliases:`, so renaming a document '
-            'never breaks a wikilink.']
+            'never breaks a wikilink.',
+            '',
+            # A binary is never covered by the `content` branch above, whatever was
+            # answered. The first vault built on this package answered `content` and then
+            # renamed all 308 of its binaries to ASCII kebab anyway, because a binary's
+            # name is a reference target and not prose: nothing reads inside a PDF to find
+            # it, so a name carrying spaces, a transliteration or a second spelling is a
+            # name somebody has to get exactly right by hand every time they cite it.
+            '**A binary is named in ASCII kebab, whatever language its contents are in.** '
+            'Its own name lives in `title:` on the note beside it, so the document keeps '
+            'the name its readers know it by and the reference stays typable. One '
+            'document, one name, at most 60 characters, and no extension fossils: '
+            '`report-final-v2-copy.pdf` records the history of a folder rather than the '
+            'identity of a document.',
+            '',
+            'A rename is not finished until every reference to the old name is rewritten. '
+            'That is the rule most often broken in the act of writing it down: a rename '
+            'that rewrites wikilinks and not frontmatter leaves notes naming files which '
+            'no longer exist, and a link checker cannot see it.']
     return '\n'.join(out)
 
 
