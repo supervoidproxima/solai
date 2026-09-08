@@ -12,7 +12,7 @@ knows nothing about this conversation should be able to continue from here.
 |---|---|---|
 | `py tests/run_tests.py` | The package: primitives, declarations, agents, workflows, authoring, the surface | 239 assertions |
 | `py tests/verify_engine.py` | Four kinds scaffolded, applied, re-planned, checked, then probed with a real hand edit | NOOP 6 / 42 / 30 / 34 |
-| `py tests/verify_install.py` | `install.ps1`: stage 0, the helpers, and the promise that a dry run writes nothing | 16 assertions |
+| `py tests/verify_install.py` | `install.ps1`: stage 0, the helpers, the promise that a dry run writes nothing, strict-mode hazards | 17 assertions |
 
 The runner refuses a run whose assertion count does not match its declaration, so a deleted
 assertion fails as loudly as a broken one.

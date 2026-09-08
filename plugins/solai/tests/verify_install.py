@@ -35,7 +35,7 @@ INSTALLER = os.path.join(REPO, 'install.ps1')
 sys.path.insert(0, HERE)
 from harness import Suite                                           # noqa: E402
 
-EXPECTED = 16
+EXPECTED = 17
 NAME = 'install'
 
 PS = 'powershell'
@@ -94,6 +94,27 @@ def tree(path):
     return sorted(out)
 
 
+def bare_counts(body):
+    """Lines where .Count is read off a parenthesised command rather than an @() array."""
+    bad = []
+    for i, line in enumerate(body.splitlines(), 1):
+        col = line.find(').Count')
+        while col != -1:
+            depth, j = 0, col
+            while j >= 0:
+                if line[j] == ')':
+                    depth += 1
+                elif line[j] == '(':
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j -= 1
+            if j > 0 and line[j - 1] != '@':
+                bad.append('line %d' % i)
+            col = line.find(').Count', col + 1)
+    return bad
+
+
 # --------------------------------------------------------------------------- groups
 
 def group_shape(s):
@@ -112,6 +133,16 @@ def group_shape(s):
          'the summary numbers every stage against this total')
     s.ok('IN-04', 'every documented switch is a real parameter',
          all(('[switch] $' + n) in body for n in ('DryRun', 'SkipApps', 'PublicOnly', 'NoHandoff')))
+
+    # The script runs under Set-StrictMode -Version Latest, where .Count on a scalar or on
+    # nothing is a reference to a property that is not there, and terminating. A command in
+    # parentheses returns a scalar for one result and $null for none, so `(cmd ...).Count` is
+    # correct only on a machine that happens to return two or more. That is why this is static
+    # and not behavioural: the failing case is a fresh machine, which no dry run reproduces.
+    s.ok('IN-17', 'every .Count on a command result is wrapped in @()',
+         not bare_counts(body),
+         'unwrapped: ' + ', '.join(bare_counts(body)) if bare_counts(body) else
+         'a scalar result would otherwise terminate the run')
 
 
 def group_dry_run(s):
