@@ -302,15 +302,18 @@ if (Test-Path $configMarker) {
       if ($remotes -notmatch '(?m)^origin$') {
         $null = Invoke-Native 'git' 'remote' 'add' 'origin' ("https://github.com/{0}.git" -f $ConfigRepo)
       }
-      $null = Invoke-Native 'git' @($helper + @('fetch', '--quiet', 'origin'))
-      if ($script:NativeExit -ne 0) { throw 'fetch failed' }
+      $fetched = Invoke-Native 'git' @($helper + @('fetch', '--quiet', 'origin'))
+      if ($script:NativeExit -ne 0) { throw ('fetch failed - ' + $fetched) }
       $remoteInfo = Invoke-Native 'git' @($helper + @('remote', 'show', 'origin'))
       $branch = ([regex]::Match($remoteInfo, 'HEAD branch:\s*(\S+)')).Groups[1].Value
       if (-not $branch) { $branch = 'main' }
-      $null = Invoke-Native 'git' 'checkout' '-f' '-B' $branch ("origin/{0}" -f $branch) '--quiet'
-      if ($script:NativeExit -ne 0) { throw 'checkout failed' }
+      $checked = Invoke-Native 'git' 'checkout' '-f' '-B' $branch ("origin/{0}" -f $branch) '--quiet'
+      if ($script:NativeExit -ne 0) { throw ('checkout failed - ' + $checked) }
       Say 'installed' ("configuration restored from {0} ({1})" -f $ConfigRepo, $branch)
     } catch {
+      # What git said is the whole value of this stage failing. Swallowing it leaves the next
+      # run guessing between a credential problem, a private repository and a wrong branch.
+      Say 'failed' (($_.Exception.Message -split "`r?`n" | Where-Object { $_ } ) -join ' / ')
       Need ("restore the configuration by hand: git clone https://github.com/{0}.git" -f $ConfigRepo)
     } finally {
       Pop-Location
@@ -339,7 +342,11 @@ Write-Stage 'OneDrive and the vaults'
 if (-not $onedrive) {
   Need 'sign in to OneDrive, then run this script again to pick up the vault folder'
 } elseif ($vaultRoot -and (Test-Path $vaultRoot)) {
-  $count = (Get-ChildItem $vaultRoot -Directory -ErrorAction SilentlyContinue).Count
+  # @() before .Count is load-bearing, not decoration: under Set-StrictMode -Version Latest a
+  # bare .Count on zero or one item is a reference to a property that is not there, which is
+  # terminating. A fresh machine has an empty vault root - the one case a working machine
+  # never reproduces, and the one this stage exists to handle.
+  $count = @(Get-ChildItem $vaultRoot -Directory -ErrorAction SilentlyContinue).Count
   Say 'ok' ("{0} ({1} folders)" -f $vaultRoot, $count)
   Say 'ok' 'mark the folder "always keep on this device" in File Explorer: online-only files break git and Obsidian'
 } else {
