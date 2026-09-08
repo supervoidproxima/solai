@@ -286,8 +286,20 @@ Write-Stage 'Claude Code'
 if (Have 'claude') {
   Say 'ok' ("already installed: " + (Invoke-Native 'claude' '--version'))
 } else {
-  # The native installer needs no elevation and keeps itself updated afterwards.
-  irm https://claude.ai/install.ps1 | iex
+  # The native installer needs no elevation and keeps itself updated afterwards. It runs in a
+  # child process rather than as `irm | iex`: this script is itself piped into `iex`, so a nested
+  # `iex` inherits the outer pipeline's stdin and the inner installer stalls with the stage
+  # half-printed and nothing further. A file plus a child process give it a console of its own.
+  $shell     = if (Have 'pwsh') { 'pwsh' } else { 'powershell' }
+  $installer = Join-Path ([System.IO.Path]::GetTempPath()) 'claude-install.ps1'
+  try {
+    Invoke-WebRequest 'https://claude.ai/install.ps1' -UseBasicParsing -OutFile $installer
+    $null = Invoke-Native $shell '-NoProfile' '-ExecutionPolicy' 'Bypass' '-File' $installer
+  } catch {
+    Say 'action' ('could not fetch the Claude Code installer: ' + $_.Exception.Message)
+  } finally {
+    Remove-Item $installer -Force -ErrorAction SilentlyContinue
+  }
   $local = Join-Path $env:USERPROFILE '.local\bin'
   if (Test-Path (Join-Path $local 'claude.exe')) {
     $env:Path = "$local;$env:Path"
