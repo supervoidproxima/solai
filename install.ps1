@@ -359,10 +359,15 @@ if (Test-Path $configMarker) {
     # Git for Windows bundles Git Credential Manager, which signs in through the browser and
     # needs no elevation. The GitHub CLI is used only if it happens to be here and logged in:
     # its installer is machine-wide, and on a locked-down machine it cannot be installed at all.
+    # `gh auth status` reports "Logged in" for any host it knows, an enterprise one included,
+    # and for a token that cannot serve git. Matching that string once cost a whole restore:
+    # the helper was chosen, returned nothing, git fell back to its own prompt, and under
+    # `irm | iex` there is no tty for one. Ask for the github.com token instead and let the
+    # exit code decide, which is the only functional proof the helper will produce a credential.
     $helper = @()
     if (Have 'gh') {
-      $status = Invoke-Native 'gh' 'auth' 'status'
-      if ($status -match 'Logged in') {
+      $null = Invoke-Native 'gh' 'auth' 'token' '--hostname' 'github.com'
+      if ($script:NativeExit -eq 0) {
         $helper = @('-c', 'credential.helper=', '-c', 'credential.helper=!gh auth git-credential')
         Say 'ok' 'authenticating through the GitHub CLI'
       }
@@ -379,7 +384,16 @@ if (Test-Path $configMarker) {
       if ($remotes -notmatch '(?m)^origin$') {
         $null = Invoke-Native 'git' 'remote' 'add' 'origin' ("https://github.com/{0}.git" -f $ConfigRepo)
       }
-      $fetched = Invoke-Native 'git' @($helper + @('fetch', '--quiet', 'origin'))
+      # Git Credential Manager opens its own browser window and is unaffected by this; what it
+      # switches off is git's terminal prompt, which cannot work here and fails obscurely
+      # (`/dev/tty: No such device or address`) instead of saying the credential is missing.
+      $savedPrompt = $env:GIT_TERMINAL_PROMPT
+      $env:GIT_TERMINAL_PROMPT = '0'
+      try {
+        $fetched = Invoke-Native 'git' @($helper + @('fetch', '--quiet', 'origin'))
+      } finally {
+        $env:GIT_TERMINAL_PROMPT = $savedPrompt
+      }
       if ($script:NativeExit -ne 0) { throw ('fetch failed - ' + $fetched) }
       $remoteInfo = Invoke-Native 'git' @($helper + @('remote', 'show', 'origin'))
       $branch = ([regex]::Match($remoteInfo, 'HEAD branch:\s*(\S+)')).Groups[1].Value
@@ -391,7 +405,8 @@ if (Test-Path $configMarker) {
       # What git said is the whole value of this stage failing. Swallowing it leaves the next
       # run guessing between a credential problem, a private repository and a wrong branch.
       Say 'failed' (($_.Exception.Message -split "`r?`n" | Where-Object { $_ } ) -join ' / ')
-      Need ("restore the configuration by hand: git clone https://github.com/{0}.git" -f $ConfigRepo)
+      Need 'if this was the credential: `gh auth setup-git`, or clear the gh login and let Git Credential Manager take it'
+      Need ("then restore by hand in ~/.claude: git init; git remote add origin https://github.com/{0}.git; git fetch origin; git checkout -f main" -f $ConfigRepo)
     } finally {
       Pop-Location
     }
