@@ -5,8 +5,8 @@
     py scaffold.py <vault-root> --archetype role --materials "<file or folder>" ...
     py scaffold.py <vault-root> --apply
     py scaffold.py <vault-root> --rollback
-    py scaffold.py <vault-root> --diff <region>
-    py scaffold.py <vault-root> --adopt <region> --because CHG-NNN
+    py scaffold.py <vault-root> --diff <region|path>
+    py scaffold.py <vault-root> --adopt <region|path> --because CHG-NNN
     py scaffold.py <vault-root> --from-package
 
 `--plan` is the default and writes nothing. Exit 1 on any refusal.
@@ -43,6 +43,7 @@ sys.path.insert(0, os.path.dirname(PKG))
 sys.path.insert(0, PKG)
 
 from lib import decl, engine, fsplan, VERSION  # noqa: E402
+from lib.stamp import HAND_EDITED as ST_HAND_EDITED  # noqa: E402
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -59,6 +60,18 @@ ROW_ADOPTED = (
     'body-sha = "%s"\n'
     'because  = "%s"\n'
     'date     = "%s"\n')
+
+# A whole file carries no `region`, and that absence is what tells the two apart. It carries one
+# thing a region row does not: what the package shipped at the moment of the signature, so that a
+# release moving the file afterwards is reported rather than covered by a signature never given
+# against it.
+ROW_ADOPTED_FILE = (
+    '\n[[adopted]]\n'
+    'artefact    = "%s"\n'
+    'body-sha    = "%s"\n'
+    'package-sha = "%s"\n'
+    'because     = "%s"\n'
+    'date        = "%s"\n')
 
 
 def parse_argv(argv):
@@ -114,6 +127,87 @@ def parse_argv(argv):
     return opts
 
 
+def _plan_rows(root, pkg, answers, arch, o):
+    """Every row a plain run would produce -> {path: action}. Writes nothing.
+
+    The plan is the authority on what state a file is in, so `--adopt <path>` asks it rather
+    than classifying the file a second time in here. A second classifier is how the engine
+    grew two answers to one question twice already.
+    """
+    result = engine.Result()
+    plan, _L, _tier = engine.build_plan(root, pkg, answers, arch, result)
+    return {a.rel: a for a in plan.actions}
+
+
+SIGNABLE = ('FOREIGN', 'LOCAL', ST_HAND_EDITED)
+
+
+def file_mode(root, pkg, answers, arch, o):
+    """`--diff <path>` and `--adopt <path> --because CHG-NNN`, for a whole file.
+
+    The same word as the region verb and the same promise: the file stays skipped and is never
+    overwritten. What the signature adds is a name, a date and a change record, in place of a
+    row that says the engine cannot tell whose the file is.
+    """
+    import difflib
+    from lib import stamp as ST
+
+    path = o['region'].replace(os.sep, '/')
+    row = _plan_rows(root, pkg, answers, arch, o).get(path)
+    if row is None:
+        print('  nothing in this vault\'s plan is called %r.' % path)
+        return 1
+
+    here = fsplan.read(os.path.join(root, path.replace('/', os.sep)))
+    if here is None:
+        print('  %s does not exist, so there is nothing to sign for.' % path)
+        return 1
+
+    if o['mode'] == 'diff':
+        if not row.content:
+            print('  %s [%s] %s' % (path, row.verdict, row.reason))
+            print('  no diff for this one: it is generated rather than copied, and the body it '
+                  'would be compared against is built inside the plan. --adopt still applies.')
+            return 1
+        shipped = fsplan.read(row.content)
+        print()
+        print('%s   %s' % (path, row.verdict))
+        if shipped is None:
+            print('  the package ships no such file any more.')
+            return 0
+        if ST.normalise(here) == ST.normalise(shipped):
+            print('  identical to what the package ships.')
+            return 0
+        for line in difflib.unified_diff(here.split('\n'), shipped.split('\n'),
+                                         'in the vault', 'from the package', lineterm=''):
+            print('  ' + line)
+        return 0
+
+    if not o['because']:
+        print('  --adopt needs --because CHG-NNN. A divergence with no record behind it '
+              'is the state adoption exists to end, not one to write down.')
+        return 1
+    if row.verdict not in SIGNABLE:
+        print('  %s reads %s, so there is nothing to sign for. Adoption is for a file this '
+              'vault keeps against what the package ships.' % (path, row.verdict or row.kind))
+        return 1
+
+    art = None
+    for a in arch.artefacts:
+        if a.get('path') == path:
+            art = a
+    volatile = (art or {}).get('volatile')
+    target = os.path.join(root, '_system', 'os', 'adopted.toml')
+    head = '' if os.path.exists(fsplan.w(target)) else HEAD_ADOPTED
+    out = ROW_ADOPTED_FILE % (path, ST.body_sha(here, volatile), row.src or '',
+                              o['because'], engine._today())
+    with open(fsplan.w(target), 'a', encoding='utf-8', newline='\n') as fh:
+        fh.write(head + out)
+    print('  adopted %s under %s. Still skipped, still never overwritten.'
+          % (path, o['because']))
+    return 0
+
+
 def _rendered_regions(root, pkg, answers, arch):
     """Every generated region a run would produce -> {(path, region id): text}.
 
@@ -145,7 +239,11 @@ def region_mode(root, pkg, answers, arch, o):
     wanted = _rendered_regions(root, pkg, answers, arch)
     hits = sorted({path for (path, r) in wanted if r == rid})
     if not hits:
+        # Not a region: a whole file, which takes the same two verbs and the same word.
+        if '/' in rid or '.' in rid:
+            return file_mode(root, pkg, answers, arch, o)
         print('  no generated region %r. Known: %s'
+              '\n  A whole file is named by its path, e.g. _system/scripts/thing.py'
               % (rid, ', '.join(sorted({r for _, r in wanted}))))
         return 1
 

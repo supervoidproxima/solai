@@ -59,6 +59,15 @@ the branch documented as a skip wrote over them anyway. The stamp moved beside t
 state with no record splits by evidence rather than by assumption: identical to what would be
 written is proof of authorship, and different is proof of nothing.
 
+`CP-49` to `CP-53` are `RES-014`: a whole file can be signed for, the way a region already
+could. The signature is over the bytes it was given for and it says what the package has
+done since, so a vault that keeps its own copy stops being told, on every run forever, that
+the engine cannot tell whose the file is.
+
+`CP-50` passes with the feature reverted and is kept for that reason: a signature that survived
+an edit to the file would be worse than no signature at all, and it is the assertion that would
+say so.
+
 `CP-43` to `CP-48` are the same argument for a file the package OWNS and the vault RUNS. That
 branch had three fates and needed six, and the missing one was the ordinary one: the package
 changed the file. Without a record of what was last copied in, "I changed this" and "you edited
@@ -73,7 +82,7 @@ import tempfile
 from lib import decl, engine, fsplan, regions, stamp
 from lib.emit import bases
 
-EXPECTED = 49
+EXPECTED = 54
 NAME = 'compiled'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -616,7 +625,7 @@ SHIPPED = '# a shipped script\nprint("one")\n'
 MOVED = '# a shipped script\nprint("two")\n'
 
 
-def _copied_case(tmp, name, here=None, shipped=SHIPPED, record=None, force=()):
+def _copied_case(tmp, name, here=None, shipped=SHIPPED, record=None, force=(), signed=None):
     """-> (action, stamps). A vault holding one copied file, or none, and a package source."""
     root = os.path.join(tmp, name)
     os.makedirs(os.path.join(root, 'vault', '_system', 'scripts'))
@@ -630,8 +639,16 @@ def _copied_case(tmp, name, here=None, shipped=SHIPPED, record=None, force=()):
             fh.write(here)
     plan = fsplan.Plan(os.path.join(root, 'vault'), '0.34.0')
     st = engine.Stamps({target: record} if record else None)
-    act = engine._copied(plan, target, 'scripts', src, force, st)
+    act = engine._copied(plan, target, 'scripts', src, force, st, signed)
     return act, st, target
+
+
+def _sig(text, because='CHG-132', package_sha=None):
+    """A signature over these bytes, optionally naming what the package shipped then."""
+    row = {'body-sha': stamp.body_sha(text), 'because': because}
+    if package_sha is not None:
+        row['package-sha'] = package_sha
+    return {'_system/scripts/thing.py': row}
 
 
 def _rec(text):
@@ -690,6 +707,43 @@ def group_copied(s):
         s.ok('CP-48', '--force takes a copied file by its own path, and leaves its siblings',
              act.kind == fsplan.COPY and act2.kind == fsplan.SKIP,
              repr((act.kind, act2.kind)))
+
+        # RES-014. The row that repeated forever, and the exit it never had.
+        mine = '# somebody else entirely\n'
+        act, st, target = _copied_case(tmp, 'signed', here=mine, signed=_sig(mine))
+        s.ok('CP-49', 'a file somebody signed for is ADOPTED rather than FOREIGN, still '
+                      'skipped, and still not claimed by the package',
+             act.kind == fsplan.SKIP and act.verdict == engine.ADOPTED
+             and 'CHG-132' in act.reason and st.next == {},
+             repr((act.kind, act.verdict, act.reason, st.next)))
+
+        act, st, target = _copied_case(tmp, 'signed-then-edited', here=mine + '# more\n',
+                                       signed=_sig(mine))
+        s.ok('CP-50', 'the signature is over the bytes it was given for: edit the file again '
+                      'and it reads FOREIGN once more',
+             act.kind == fsplan.SKIP and act.verdict == 'FOREIGN',
+             repr((act.kind, act.verdict, act.reason)))
+
+        act, st, target = _copied_case(tmp, 'signed-package-moved', here=mine, shipped=MOVED,
+                                       signed=_sig(mine, package_sha=stamp.sha(SHIPPED)))
+        s.ok('CP-51', 'a signed file whose package version has moved since says so, and is '
+                      'still not overwritten',
+             act.kind == fsplan.SKIP and act.verdict == engine.ADOPTED
+             and 'changed it since' in act.reason, repr((act.verdict, act.reason)))
+
+        act, st, target = _copied_case(tmp, 'signed-local', here=SHIPPED + '# mine\n',
+                                       shipped=MOVED, record=_rec(SHIPPED),
+                                       signed=_sig(SHIPPED + '# mine\n'))
+        s.ok('CP-52', 'a recorded file this vault edited can be signed for too, and keeps its '
+                      'old record',
+             act.kind == fsplan.SKIP and act.verdict == engine.ADOPTED
+             and st.next[target] == _rec(SHIPPED), repr((act.verdict, st.next)))
+
+        act, st, target = _copied_case(tmp, 'skip-remembers', here=mine)
+        s.ok('CP-53', 'a skipped row remembers the source it would have copied and the sha it '
+                      'would have written, which is what --diff and --adopt read',
+             act.content and os.path.exists(act.content) and act.src == stamp.sha(SHIPPED),
+             repr((act.content, act.src)))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

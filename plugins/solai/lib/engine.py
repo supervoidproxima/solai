@@ -213,6 +213,34 @@ def read_adopted(root):
     return out
 
 
+def adopted_files(rows):
+    """The rows of `adopted.toml` that name a whole file rather than a region.
+
+    A region row carries `region`; a file row does not, and that absence is what distinguishes
+    them. One ledger, one word, two subjects: `--adopt` means the same thing about a file that
+    it has always meant about a region, which is that somebody has signed for the divergence.
+    """
+    return {path: row for (path, rid), row in rows.items() if not rid}
+
+
+def signed_for(row, cur, volatile=None, shipped=None):
+    """-> the reason text for a file somebody has signed for, or None.
+
+    The signature is over the bytes that were there when it was given, exactly as a region's
+    is. Edit the file again and it stops matching, and the row goes back to saying nobody has
+    accounted for this. `package-sha` is the other half: it records what the package shipped at
+    that moment, so a release that moves the file afterwards is reported rather than hidden by
+    a signature that was never given against it.
+    """
+    if not row or row.get('body-sha') != stamp.body_sha(cur, volatile):
+        return None
+    because = row.get('because') or 'no change record named'
+    was = row.get('package-sha')
+    if shipped is not None and was and was != shipped:
+        return 'signed for under %s, and the package has changed it since' % because
+    return 'signed for under %s' % because
+
+
 def merge_regions(existing, region_text, expected_src, order, force=(), adopted=None):
     """-> (new_text, per_region_verdict). A dirty region costs one region, not the file."""
     text, verdicts = existing, {}
@@ -356,6 +384,7 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
     stamps = Stamps(read_stamps(root))
 
     adopted_rows = read_adopted(root)
+    signed = adopted_files(adopted_rows)
     adopted = {}
     for (art_path, rid), row in adopted_rows.items():
         adopted.setdefault(art_path, {})[rid] = row
@@ -380,7 +409,7 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
             if not os.path.exists(fsplan.w(source)):
                 result.errors.append('%s: no such file to copy: %s' % (art['id'], source))
                 continue
-            a = _copied(plan, target, art['id'], source, force, stamps)
+            a = _copied(plan, target, art['id'], source, force, stamps, signed)
             if a is not None and a.kind == fsplan.SKIP and a.verdict == 'FOREIGN':
                 unrecorded.append((art['id'], target))
 
@@ -394,7 +423,9 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
             'from what it ships now. Each is either an edit of yours or a copy from an older '
             'release, and nothing here can tell which. They are left alone. Compare one, then '
             'take them with `--force %s`, or one at a time by its path. Once taken they are '
-            'recorded, and every later release updates them without asking.'
+            'recorded, and every later release updates them without asking. A file you mean '
+            'to keep is signed for instead, with `--adopt <path> --because CHG-NNN`, and goes '
+            'on being skipped under a name.'
             % (len(unrecorded), ','.join(ids)))
 
     # 2b materials handed in at setup ----------------------------------------
@@ -605,7 +636,7 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
         s = src_for('bases')
         body = bases.render(classes, arch.lookups)
         _generated(plan, art['path'], 'registry-base', body, s, force,
-                   volatile=bases.VOLATILE, fmeta=None, stamps=stamps)
+                   volatile=bases.VOLATILE, fmeta=None, stamps=stamps, signed=signed)
 
     # 7b start here -----------------------------------------------------------
     # Written before the seeded files and before CLAUDE.md, because it is the one a person
@@ -618,7 +649,7 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
         body = starthere.render(L, arch, classes,
                                 dict(answers, package_version=VERSION), inbox)
         _generated(plan, art['path'], 'start-here', body, s, force, fmeta=None,
-                   stamps=stamps)
+                   stamps=stamps, signed=signed)
 
     # 8 seeded files -----------------------------------------------------------
     for art in arch.artefacts:
@@ -695,6 +726,11 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
     return plan, L, tier
 
 
+# Both exits, on the row itself. A skip that names only `--force` teaches only `--force`,
+# and for a file the vault means to keep that is the one move it does not want.
+KEEP_IT = ('; keep yours with `--adopt %s --because CHG-NNN`, see what differs with '
+           '`--diff` on the same path, or take the package\'s with `--force`')
+
 TAKE_IT = ('; take it with `--force %s`, which overwrites what is there. '
            'There is no undoing that except `--rollback`')
 
@@ -709,7 +745,7 @@ def _forced(aid, path, force):
     return aid in force or path in force
 
 
-def _copied(plan, target, aid, source, force, stamps):
+def _copied(plan, target, aid, source, force, stamps, signed=None):
     """A file the package owns and the vault runs. Six fates, and one of them was missing.
 
     The branch used to hash the shipped source against the file and call every difference
@@ -740,6 +776,8 @@ def _copied(plan, target, aid, source, force, stamps):
     here = stamp.sha(cur)
     state = classify_recorded(cur, record, None)
 
+    reason = signed_for((signed or {}).get(target), cur, None, shipped)
+
     if state == 'FOREIGN':
         if here == shipped:
             # Ours, demonstrably, whoever put it there. Writing the record down is the adoption.
@@ -748,13 +786,21 @@ def _copied(plan, target, aid, source, force, stamps):
             return plan.noop(target, aid, verdict='FOREIGN',
                              reason='not recorded, and identical: adopted')
         if not _forced(aid, target, force):
-            return plan.skip(target, aid, 'FOREIGN', 'not recorded, and differs')
+            if reason:
+                return plan.skip(target, aid, ADOPTED, reason, content=source, src=shipped)
+            return plan.skip(target, aid, 'FOREIGN',
+                             'not recorded, and differs' + KEEP_IT % target,
+                             content=source, src=shipped)
         return take('FOREIGN')
 
     if state == stamp.HAND_EDITED:
         if not _forced(aid, target, force):
             keep()
-            return plan.skip(target, aid, 'LOCAL', 'edited here since we wrote it')
+            if reason:
+                return plan.skip(target, aid, ADOPTED, reason, content=source, src=shipped)
+            return plan.skip(target, aid, 'LOCAL',
+                             'edited here since we wrote it' + KEEP_IT % target,
+                             content=source, src=shipped)
         return take('LOCAL')
 
     # Recorded and unedited. The only question left is whether the package moved.
@@ -765,7 +811,7 @@ def _copied(plan, target, aid, source, force, stamps):
 
 
 def _generated(plan, path, aid, body, src, force, volatile=None, fmeta=None, fmeta_text=None,
-               stamps=None):
+               stamps=None, signed=None):
     cur = fsplan.read(plan.path(path))
     if fmeta_text is not None:
         new = stamp.stamped_text(fmeta_text, body, src, GENERATED_BY, volatile)
@@ -775,7 +821,7 @@ def _generated(plan, path, aid, body, src, force, volatile=None, fmeta=None, fme
         new = stamp.stamped_text(fmt, body, src, GENERATED_BY, volatile)
     else:
         return _unstamped(plan, path, aid, stamp.normalise(body), cur, src, force,
-                          volatile, stamps)
+                          volatile, stamps, signed)
     state = classify_file(cur, src, 'generated', volatile)
     if state == 'ABSENT':
         plan.write(path, aid, new, src=src)
@@ -788,7 +834,7 @@ def _generated(plan, path, aid, body, src, force, volatile=None, fmeta=None, fme
                    verdict=state if state != stamp.CLEAN else 'CONTENT-CHANGED')
 
 
-def _unstamped(plan, path, aid, new, cur, src, force, volatile, stamps):
+def _unstamped(plan, path, aid, new, cur, src, force, volatile, stamps, signed=None):
     """The same five states for a file that cannot carry a stamp, read from the sidecar.
 
     The one state with no counterpart above is `FOREIGN` with no record, and it splits in two
@@ -826,15 +872,19 @@ def _unstamped(plan, path, aid, new, cur, src, force, volatile, stamps):
             stamps.put(path, mine)
         return plan.noop(path, aid, verdict='FOREIGN',
                          reason='not recorded, and identical: adopted')
+    reason = signed_for((signed or {}).get(path), cur, volatile, src)
+    if state in ('FOREIGN', stamp.HAND_EDITED) and aid not in force and reason:
+        keep()
+        return plan.skip(path, aid, ADOPTED, reason, src=src)
     if state == 'FOREIGN' and aid not in force:
         keep()
         return plan.skip(path, aid, 'FOREIGN',
                          'no record of this package writing it, and it differs from what '
-                         'would be written' + TAKE_IT % aid)
+                         'would be written' + TAKE_IT % aid, src=src)
     if state == stamp.HAND_EDITED and aid not in force:
         keep()
         return plan.skip(path, aid, stamp.HAND_EDITED,
-                         'hand-edited; not overwritten' + TAKE_IT % aid)
+                         'hand-edited; not overwritten' + TAKE_IT % aid, src=src)
     return write(state)
 
 

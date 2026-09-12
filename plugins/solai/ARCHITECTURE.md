@@ -116,6 +116,15 @@ it is somebody else's code and a stamp inside it would be an edit to it. That re
 the engine tell "the package moved this" from "you edited this", which it could not do at all
 until 0.34.0, and could therefore never deliver a fix to a shipped script.
 
+`_system/os/adopted.toml` is the other ledger, and it holds signatures rather than hashes of our
+own output: a divergence somebody has taken responsibility for, with a change record behind it. A
+row naming a region signs for that block of a generated file; a row with no region signs for a
+whole file, copied or generated, that this vault keeps against what the package ships. Either way
+the thing signed for stays skipped and is never overwritten. What the signature buys is the
+difference between an anonymous divergence and one with a name on it, and for a file it also
+records what the package shipped at that moment, so a later release that moves the file is
+reported rather than covered by a signature never given against it.
+
 `_system/scripts/` holds the checks and generators, copied rather than generated, and they share
 one argument reader, `_args.py`. The rule it enforces is narrow and is the one that can be kept:
 the vault root is the first argument, and an option nothing declared is refused by name with

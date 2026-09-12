@@ -99,8 +99,12 @@ class Plan(object):
     def noop(self, rel, artefact, verdict=stamp.CLEAN, reason='identical'):
         return self.add(Action(NOOP, rel, artefact, verdict=verdict, reason=reason))
 
-    def skip(self, rel, artefact, verdict, reason, detail=''):
-        return self.add(Action(SKIP, rel, artefact, verdict=verdict, reason=reason, detail=detail))
+    def skip(self, rel, artefact, verdict, reason, detail='', content=None, src=None):
+        # A skipped row carries what it would have done: the source it would have copied,
+        # or the sha it would have written against. Nothing applies a SKIP, so these are
+        # inert to the apply and are the whole of what `--diff` and `--adopt <path>` read.
+        return self.add(Action(SKIP, rel, artefact, verdict=verdict, reason=reason,
+                               detail=detail, content=content, src=src))
 
     def copy(self, rel, artefact, source_path, verdict=None, reason=''):
         return self.add(Action(COPY, rel, artefact, content=source_path,

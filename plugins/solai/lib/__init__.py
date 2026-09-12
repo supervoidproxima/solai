@@ -5,4 +5,4 @@ Primitives (fm, stamp, regions, fsplan) know nothing about vaults. Declarations 
 know nothing about output. Emitters (emit/) know nothing about the filesystem. The
 engine wires the four together and is the only thing that writes.
 """
-VERSION = '0.35.0'
+VERSION = '0.36.0'

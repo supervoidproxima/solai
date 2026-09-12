@@ -361,6 +361,45 @@ def main():
                         fh.write(before)
             checks.append(probe)
 
+            # The second probe: sign for a copied file this vault has made its own, and
+            # require the plan to stop saying it cannot tell whose it is. A refusal is checked
+            # first, because `--adopt` with nothing behind it would be the state adoption
+            # exists to end, written down.
+            sign = 'not run'
+            mine = os.path.join(root, '_system', 'scripts', 'check_links.py')
+            if os.path.exists(mine):
+                with io.open(mine, encoding='utf-8') as fh:
+                    before = fh.read()
+                with io.open(mine, 'w', encoding='utf-8', newline='\n') as fh:
+                    fh.write(before + '\n# this vault needed one more thing\n')
+                rel = '_system/scripts/check_links.py'
+                code, _o = run([SCAFFOLD, root, '--adopt', rel])
+                refused = code != 0
+                run([SCAFFOLD, root, '--adopt', rel, '--because', 'CHG-001'])
+                _c, after = run([SCAFFOLD, root])
+                row = [ln for ln in after.split('\n') if rel in ln]
+                signed = bool(row) and 'ADOPTED' in row[0] and 'CHG-001' in row[0]
+                with io.open(mine, 'w', encoding='utf-8', newline='\n') as fh:
+                    fh.write(before + '\n# and then another\n')
+                _c, again = run([SCAFFOLD, root])
+                row2 = [ln for ln in again.split('\n') if rel in ln]
+                void = bool(row2) and 'ADOPTED' not in row2[0]
+                sign = 'adoption ok' if (refused and signed and void) else 'ADOPTION BROKEN'
+                if not refused:
+                    failures.append('%s: --adopt with no --because was accepted' % arch)
+                if not signed:
+                    failures.append('%s: a signed file does not read ADOPTED: %s'
+                                    % (arch, (row or ['no row'])[0].strip()))
+                if not void:
+                    failures.append('%s: the signature survived an edit to the file: %s'
+                                    % (arch, (row2 or ['no row'])[0].strip()))
+                with io.open(mine, 'w', encoding='utf-8', newline='\n') as fh:
+                    fh.write(before)
+                led = os.path.join(root, '_system', 'os', 'adopted.toml')
+                if os.path.exists(led):
+                    os.remove(led)
+            checks.append(sign)
+
             rows.append((arch, lang, 'NOOP %d  agents %d  workflows %d'
                          % (noop, len(got), len(got_wf)),
                          '   ' + '   '.join(checks)))
