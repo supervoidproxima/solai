@@ -75,11 +75,15 @@ is not decoration: the vault this pattern came from computed its own verdict at 
 ## Layout
 
 ```
-doctrine.md          18 principles, ranked. Ships here, never copied into a vault
+doctrine.md          19 principles, ranked. Ships here, never copied into a vault
+ARCHITECTURE.md      the stack in nine layers, and where each boundary runs
+ROADMAP.md           what is next, what is deferred, what has been decided against
 conventions.md       kebab-case naming, frontmatter, handoff at half context, the dashboard
 skills/solai/        the persona you talk to
 skills/solai-scaffold/  the engine
 skills/solai-adopt/  the read-only probe
+skills/solai-release/   the release order: gates last, immediately before the push
+skills/solai-kb/     a knowledge base built out of a vault. No skill surface yet (ROADMAP R-1)
 lib/                 primitives (fm, stamp, regions, fsplan), declarations, emitters
 archetypes/          minimal, project, personal, role
 runtime/             copied into each vault: validator, stamp check, link check, dashboard
