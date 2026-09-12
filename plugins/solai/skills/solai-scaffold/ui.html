@@ -5,6 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <title>Solai</title>
+<!-- Resolved before the first paint. A toggle that only runs after the stylesheet has
+     painted shows the wrong theme for a frame, which reads as a flaw in the page. -->
+<script>
+(function(){
+  var KEY = 'solai-theme', mode;
+  try { mode = localStorage.getItem(KEY); } catch (e) {}
+  if (mode !== 'light' && mode !== 'dark') mode = 'system';
+  var mq = window.matchMedia('(prefers-color-scheme: light)');
+  function paint(){
+    document.documentElement.setAttribute(
+      'data-theme', mode === 'system' ? (mq.matches ? 'light' : 'dark') : mode);
+  }
+  function follow(){ if (mode === 'system') paint(); }
+  window.__solaiTheme = {
+    get: function(){ return mode; },
+    set: function(m){ mode = m; try { localStorage.setItem(KEY, m); } catch (e) {} paint(); }
+  };
+  paint();
+  if (mq.addEventListener) mq.addEventListener('change', follow);
+  else if (mq.addListener) mq.addListener(follow);
+})();
+</script>
 <style>
 :root{
   color-scheme:dark;
@@ -15,6 +37,18 @@
   --warn:#d98a3e; --warn-soft:#2a2016; --refuse:#e8756a;
   --shadow:0 1px 2px rgba(0,0,0,.42), 0 14px 34px -18px rgba(0,0,0,.75);
   --r:6px; --r-sm:4px;
+}
+/* The attribute is written by the head script, never by a media query, so "system" can be a
+   third state rather than the absence of a choice: light and dark are both stated, and
+   system is the mode that keeps restating whichever one the OS is in. */
+:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f6f4ef; --panel:#fffefb; --sunk:#efece4; --ink:#1b1d21; --ink-2:#43474e;
+  --muted:#74787e; --line:#e2ddd2; --line-2:#cbc5b8;
+  --accent:#8f6413; --accent-soft:#fbf1de; --accent-ink:#fffaf0;
+  --ok:#1c7148; --ok-soft:#e7f3ec;
+  --warn:#9a5c15; --warn-soft:#fbeedb; --refuse:#b3261e;
+  --shadow:0 1px 2px rgba(28,30,34,.07), 0 14px 34px -18px rgba(28,30,34,.30);
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -53,6 +87,16 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .steps li.auto .dot{border-style:dashed}
 .steps li.done{color:var(--ink-2)}
 .steps li.done .dot{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+/* ------------------------------------------------------------------ theme */
+.theme{display:inline-flex;margin-top:24px;padding:3px;gap:2px;
+  border:1px solid var(--line);border-radius:99px;background:var(--panel)}
+@media (max-width:900px){.theme{margin-top:14px}}
+.theme button{font:600 11.5px/1 "IBM Plex Mono",ui-monospace,Consolas,monospace;
+  padding:6px 11px;border:0;border-radius:99px;background:transparent;color:var(--muted)}
+.theme button:hover:not(.on){background:var(--accent-soft);color:var(--ink-2)}
+.theme button.on{background:var(--accent-soft);color:var(--accent);
+  box-shadow:0 0 0 1px var(--accent) inset}
 
 /* ------------------------------------------------------------------ cards */
 .step{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
@@ -228,6 +272,11 @@ pre.out{background:var(--sunk);border:1px solid var(--line);border-radius:var(--
     <li data-step="5" tabindex="0" role="button"><span class="dot">5</span> Details</li>
     <li data-step="6" tabindex="0" role="button"><span class="dot">6</span> Review</li>
   </ol>
+  <div class="theme" id="theme" role="group" aria-label="Colour theme">
+    <button type="button" data-mode="system" title="Follow this machine">System</button>
+    <button type="button" data-mode="light" title="Always light">Light</button>
+    <button type="button" data-mode="dark" title="Always dark">Dark</button>
+  </div>
 </aside>
 
 <main>
@@ -808,6 +857,25 @@ function finished(data) {
     ])
   ]));
 }
+
+// --------------------------------------------------------------- theme
+
+(function () {
+  const T = window.__solaiTheme;
+  const box = $('#theme');
+  if (!T || !box) return;
+  const paintTheme = () => {
+    for (const b of box.children) {
+      const on = b.dataset.mode === T.get();
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  };
+  for (const b of box.children) {
+    b.addEventListener('click', () => { T.set(b.dataset.mode); paintTheme(); });
+  }
+  paintTheme();
+})();
 
 paintRail();
 </script>
