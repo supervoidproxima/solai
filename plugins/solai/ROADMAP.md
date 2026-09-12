@@ -27,7 +27,7 @@ card that records whether the date was met.
 | ID | What | Why now | Status |
 |---|---|---|---|
 | **R-1** | Give `solai-kb` a skill surface: `SKILL.md`, a CHANGELOG row, a `Layout` line, and assertions | Three substantial scripts ship in the package and nothing routes to them. A layer with no surface is a layer that is not in the product, and the handoff of 2026-09-03 already recorded it. It is the only place in the package where D1 and D18 are both failing | `done`, row 60 |
-| **R-2** | Migrate the Counselor vault | The vault it was built for cannot take a release until it is migrated, and it now keeps `platform` and `subject` through an upgrade | `open`, blocked on `GAP-007` in the Solai vault: an upgrade drops what a vault declares alone when it has no compiled manifest, which is every vault old enough to need one. The 12 uncommitted files that blocked it before are committed or restored and a pre-migration bundle is taken |
+| **R-2** | Migrate the Counselor vault | The vault it was built for cannot take a release until it is migrated, and it now keeps `platform` and `subject` through an upgrade | `done` 2026-09-12, at solai 0.31.0. It cost four defects, found one at a time by attempting it: `GAP-007`, `GAP-008`, that vault's own `CHG-149`, and `GAP-009`. Its `CHG-150` records what arrived |
 | **R-3** | Refresh `README.md` against the package | It said doctrine holds 18 principles and it holds 19; its `Layout` omitted two skills. Small, and it is the first file anyone reads | `done`, with this file |
 
 ## Next
