@@ -918,6 +918,39 @@ def _relist(body, key, names):
     return '\n'.join(out)
 
 
+def _covered(folder, declared):
+    """Is `folder` the same as, or inside, one of `declared`?
+
+    The same test `_validate_set` applies. Two spellings of one rule is how a merge comes to
+    add a folder the validator then rejects, or skip one it then demands.
+    """
+    return any(folder == d or folder.startswith(d.rstrip('/') + '/')
+               for d in declared if d)
+
+
+def _add_folders(body, entries):
+    """Write `[[folders]]` blocks into a manifest's text, after the last one already there.
+
+    Appending at the end of the file would be valid TOML and would read as an afterthought
+    in a file a person opens. Inserted here, the folder table stays one block, which is what
+    `CLAUDE.md`'s structure section is rendered from.
+    """
+    if not entries:
+        return body
+    block = ''.join('[[folders]]\npath = "%s"\npurpose = "%s"\n'
+                    % (e['path'], (e.get('purpose') or '').replace('"', "'"))
+                    for e in entries)
+    at = body.rfind('[[folders]]')
+    if at < 0:
+        return body.rstrip('\n') + '\n\n' + block
+    nxt = body.find('\n[', at + 1)
+    while nxt >= 0 and body[nxt + 1:].startswith('[[folders]]'):
+        nxt = body.find('\n[', nxt + 1)
+    if nxt < 0:
+        return body.rstrip('\n') + '\n' + block
+    return body[:nxt + 1] + block + body[nxt + 1:]
+
+
 def load_merged(pkg_root, vault_root, name):
     """Upgrade load: the package archetype, PLUS what this vault declares and it does not.
 
@@ -955,6 +988,13 @@ def load_merged(pkg_root, vault_root, name):
     upgrade is for. `_declared` covers that case by listing the same directories `_compiled`
     lists, and the first build is told apart by there being no declaration at all rather than
     by the absence of a file that records them.
+
+    KEEPING A DECLARATION IS NOT KEEPING WHAT IT NEEDS, and each release found one more thing
+    in the second category: classes, then lookups, agents and workflows, then the FOLDER a kept
+    class lives in. `_validate_set` requires every class to sit under a declared folder, and a
+    class the package never heard of sits where the vault put it, so the merge kept the class
+    and then refused the set it had built. A carried folder is written into the merged manifest
+    as well as into this run.
 
     A kept declaration keeps its OWN path, inside `_system/os/`, so the engine plans a write
     of the file over itself and the row reads NOOP. The merged manifest is rendered here
@@ -1000,10 +1040,13 @@ def load_merged(pkg_root, vault_root, name):
             notes.append('%s: %r is declared by this vault and not by the %s archetype. '
                          'Kept.' % (kind, d.name, name))
 
+    kept_cards = []
+
     def take_card(d):
         """A lookup on this vault's side stays a lookup: which list a declaration belongs to
         is the vault's statement about it, and the package has no opinion about a name it
         does not carry."""
+        kept_cards.append(d)
         if d.name in local.lookup_names:
             pkg.lookups.append(d)
             return 'lookups'
@@ -1016,6 +1059,24 @@ def load_merged(pkg_root, vault_root, name):
     consider('workflows', local.workflows, pkg.workflows,
              lambda d: (pkg.workflows.append(d), 'workflows')[1])
 
+    # A kept class needs the folder it lives IN, which the package manifest was never going
+    # to declare: a class the package has not heard of lives somewhere the package has not
+    # heard of. Keeping the declaration and refusing its folder is how this merge managed to
+    # keep a class and then reject the set it had just built. The folder takes the class's own
+    # purpose, because it exists to hold that class and no other sentence describes it better.
+    carried = []
+    for d in kept_cards:
+        if not d.folder:
+            continue
+        if _covered(d.folder, [f.get('path') for f in pkg.folders]):
+            continue
+        entry = {'path': d.folder, 'purpose': getattr(d, 'purpose', '') or
+                 'declared by this vault, for its %r class' % d.name}
+        pkg.folders.append(entry)
+        carried.append(entry)
+        notes.append('folders: %r is declared too, because %r lives there and no folder in '
+                     'the %s archetype covers it.' % (d.folder, d.name, name))
+
     if pkg.kept:
         # Only the lists that gained a name are rewritten. Relisting the rest would be a
         # no-op on today's manifests and a refusal on the first one that writes an array
@@ -1024,6 +1085,10 @@ def load_merged(pkg_root, vault_root, name):
         for key in ('classes', 'lookups', 'agents', 'workflows'):
             if key in widened:
                 body = _relist(body, key, lists[key])
+        # Into the text as well as into this run: a folder declared only in memory is a
+        # folder the NEXT plain run does not know about, and the set check would refuse the
+        # vault for a state this merge created.
+        body = _add_folders(body, carried)
         pkg.manifest_text = body
         pkg.class_names, pkg.lookup_names = lists['classes'], lists['lookups']
         pkg.agent_names, pkg.workflow_names = lists['agents'], lists['workflows']

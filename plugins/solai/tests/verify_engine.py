@@ -111,11 +111,17 @@ SCAFFOLD = os.path.join(PKG, 'skills', 'solai-scaffold', 'scaffold.py')
 # The class the `upgraded` scenario declares in a vault and nowhere else. Deliberately
 # minimal and link-free: it is standing in for `deliverable` in the vault that invented it,
 # and what is being tested is whether an upgrade keeps it, not what it says.
+#
+# It lives at `zetas`, which NO archetype declares. It used to live at `registry/zeta`, under a
+# folder `project` declares for its own reasons, and so did the one real vault's own class, and
+# both therefore passed a merge that kept the class and dropped the folder it needed. A fixture
+# that shares an accidental property with the only live example confirms whatever that property
+# permits: GAP-008.
 ZETA = '''\
 schema = 1
 class     = "zeta"
 prefix    = "ZET"
-folder    = "registry/zeta"
+folder    = "zetas"
 skill     = "zeta"
 title     = "Zeta"
 purpose   = "Declared by one vault and by no archetype."
@@ -453,6 +459,17 @@ def main():
                     or '"probe-job"' not in manifest:
                 failures.append('upgraded: the compiled manifest does not list everything the '
                                 'upgrade kept, so the next plain run reads it as drift')
+                ok = False
+            # The folder the kept class lives in, which no archetype declares. Keeping a
+            # declaration and not the place it lives kept the class and then refused the
+            # set the merge had just built.
+            if 'path = "zetas"' not in manifest:
+                failures.append('upgraded: the merged manifest does not declare the folder '
+                                'the kept class lives in, so the next run refuses the vault')
+                ok = False
+            if not os.path.isdir(os.path.join(root, 'zetas')):
+                failures.append('upgraded: the folder of the kept class was never created, '
+                                'so the vault declares a folder that is not there')
                 ok = False
             for kept in (('_system', 'os', 'agents', 'probe.toml'),
                          ('_system', 'os', 'workflows', 'probe-job.toml'),

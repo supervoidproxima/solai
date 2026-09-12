@@ -4,7 +4,7 @@ What solai is made of, layer by layer, and where the boundary of each one runs.
 
 `README.md` says what the package does and `doctrine.md` says why. This file says how it is
 put together, and it is the file to read before changing `lib/`. It describes what exists on
-2026-09-12 at version 0.29.0. Where something is absent, it is named as absent: D13 holds
+2026-09-12 at version 0.30.0. Where something is absent, it is named as absent: D13 holds
 here as everywhere, and an architecture diagram that draws a box nobody built is the exact
 defect D1 forbids.
 
@@ -36,7 +36,7 @@ Read top to bottom as a single `--apply` travels it.
 |---|---|---|---|---|
 | 1 | Interview | the questions an archetype declares, asked once, stored as answers | `skills/solai/interview.md`, `_system/os/answers.toml` | `EVALS.md` E1-E3 |
 | 2 | Declaration | TOML: classes, lookups, agents, workflows, the manifest | `archetypes/*/`, `common/` | `lib/decl.py`, fails fast with every reason at once |
-| 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 359 assertions |
+| 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 362 assertions |
 | 4 | Plan and write | four write modes, region merge, rollback manifest | `lib/fsplan.py`, `lib/regions.py`, `lib/stamp.py` | `--plan` default; applying twice is provably a no-op |
 | 5 | Storage | the vault: Markdown plus YAML, and its compiled declarations | the vault, `_system/os/` | `runtime/validate_cards.py`, `check_links.py` |
 | 6 | Knowledge | a built `kb/`: one record per citable unit, SQLite FTS, a manifest | `skills/solai-kb/` | four build refusals; `tests/test_kb.py`, 25 assertions; the `answerable` scenario |
@@ -151,7 +151,7 @@ Four mechanisms, and only the first is advisory:
 
 | Gate | Proves |
 |---|---|
-| `tests/run_tests.py` | 359 assertions over the primitives, loaders and emitters |
+| `tests/run_tests.py` | 362 assertions over the primitives, loaders and emitters |
 | `tests/verify_engine.py` | four archetypes built, applied twice, checked and probed, plus `evolved` and `upgraded` |
 | `tests/verify_install.py` | the installer's branches on a machine that has nothing |
 

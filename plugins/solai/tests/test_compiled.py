@@ -38,6 +38,14 @@ had one of them is what let the defect ship.
 CP-28 passed before the fix as well, and is here for that reason rather than in spite of it:
 it holds the case the fix must NOT change. Reverting the loader turns CP-26, CP-27 and CP-29
 red and leaves CP-28 green, which is the shape a preservation assertion is supposed to have.
+
+`CP-30` to `CP-32` are the folder a kept class lives in, and they exist because `zeta` above
+sits at `registry/zeta`, under a folder `project` declares for its own reasons. Every assertion
+on the merge passed on that coincidence, and so did the one real vault available, whose
+`deliverable` lives in `deliverables/`. The counselor's classes live at `platforms/` and
+`subjects/`, which no archetype declares, and the merge kept the class and then refused the set
+it had just built. A fixture that shares an accidental property with the only live example
+confirms whatever that property permits.
 """
 import os
 import shutil
@@ -45,7 +53,7 @@ import tempfile
 
 from lib import decl, engine, regions, stamp
 
-EXPECTED = 29
+EXPECTED = 32
 NAME = 'compiled'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -367,4 +375,58 @@ def group_predates(s):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-GROUPS = (group_compiled, group_merge, group_predates)
+def group_folders(s):
+    """The folder a kept class lives in, which the package manifest never declared."""
+    tmp = tempfile.mkdtemp(prefix='solai-test-fd-')
+    try:
+        proj = decl._read_text(PROJ)
+        outside = ZETA.replace('registry/zeta', 'zetas')
+
+        root = _vault(tmp, manifest=decl._relist(proj, 'classes', ['zeta']),
+                      classes={'zeta': outside})
+
+        # A refusal here is the defect, not a crash: without the carry, `_validate_set`
+        # rejects the set the merge has just built. Caught so the assertion names it, because
+        # a group that raises records one failure and loses every check after it.
+        try:
+            arch, notes = decl.load_merged(PKG_ROOT, root, 'project')
+            refused = ''
+        except decl.DeclError as err:
+            arch, notes = None, []
+            refused = ' | '.join(getattr(err, 'errors', ())) or str(err)
+
+        paths = [f.get('path') for f in arch.folders] if arch else []
+        s.ok('CP-30', 'a kept class carries the folder it lives in, and the note says why',
+             'zetas' in paths
+             and any('folders:' in n and 'zetas' in n and 'zeta' in n for n in notes),
+             'keeping a declaration is not keeping what it needs. %s'
+             % ('refused: %s' % refused if refused else 'got %r' % (paths,)))
+
+        # Written back and re-read the way the next plain run reads it. A folder declared
+        # only in memory is a folder the run after this one refuses the vault for.
+        back, back_paths, back_names = None, [], []
+        if arch is not None:
+            _write(os.path.join(root, '_system', 'os', 'manifest.toml'), arch.manifest_text)
+            for c in arch.classes:
+                _write(os.path.join(root, '_system', 'os', 'classes', '%s.toml' % c.name),
+                       decl._read_text(c.path))
+            back, _ = decl.load_compiled(root)
+            back_paths = [f.get('path') for f in back.folders]
+            back_names = [c.name for c in back.classes]
+        s.ok('CP-31', 'the merged manifest declares it, so the next plain run is not a refusal',
+             'zetas' in back_paths and 'zeta' in back_names,
+             'the merge never got that far' if back is None else repr(back_paths))
+
+        # The case that must not change: a folder already covered is not declared twice.
+        root = _vault(tmp, manifest=decl._relist(proj, 'classes', ['zeta']),
+                      classes={'zeta': ZETA})
+        covered, _ = decl.load_merged(PKG_ROOT, root, 'project')
+        pkg_only, _ = decl.load_merged(PKG_ROOT, tempfile.mkdtemp(dir=tmp), 'project')
+        s.eq('CP-32', 'a folder already covered by a declared one adds nothing',
+             [f.get('path') for f in covered.folders],
+             [f.get('path') for f in pkg_only.folders])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+GROUPS = (group_compiled, group_merge, group_predates, group_folders)
