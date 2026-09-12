@@ -4,7 +4,7 @@ What solai is made of, layer by layer, and where the boundary of each one runs.
 
 `README.md` says what the package does and `doctrine.md` says why. This file says how it is
 put together, and it is the file to read before changing `lib/`. It describes what exists on
-2026-09-12 at version 0.28.0. Where something is absent, it is named as absent: D13 holds
+2026-09-12 at version 0.29.0. Where something is absent, it is named as absent: D13 holds
 here as everywhere, and an architecture diagram that draws a box nobody built is the exact
 defect D1 forbids.
 

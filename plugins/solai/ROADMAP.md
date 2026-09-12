@@ -66,6 +66,7 @@ Newest first. The CHANGELOG row is the full account; this is the index.
 
 | Version | What | Row |
 |---|---|---|
+| 0.29.0 | the knowledge layer gets a surface, and an upgrade stops believing a manifest it may predate | 59-62 |
 | 0.28.0 | the upgrade merge covers lookups, agents and workflows | 58 |
 | 0.27.0 | an upgrade MERGES rather than replacing, for classes | 57 |
 | 0.26.0 | `/solai release`, whose feature is the order | 56 |
