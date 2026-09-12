@@ -740,10 +740,12 @@ def group_copied(s):
              and st.next[target] == _rec(SHIPPED), repr((act.verdict, st.next)))
 
         act, st, target = _copied_case(tmp, 'skip-remembers', here=mine)
-        s.ok('CP-53', 'a skipped row remembers the source it would have copied and the sha it '
-                      'would have written, which is what --diff and --adopt read',
-             act.content and os.path.exists(act.content) and act.src == stamp.sha(SHIPPED),
-             repr((act.content, act.src)))
+        s.ok('CP-53', 'a skipped row remembers the source it would have copied, the sha it '
+                      'would have written, and the sha a signature must carry, which is what '
+                      '--diff and --adopt read instead of working it out a second time',
+             act.content and os.path.exists(act.content) and act.src == stamp.sha(SHIPPED)
+             and act.sign == stamp.sha(mine),
+             repr((act.content, act.src, act.sign)))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

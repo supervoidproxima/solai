@@ -787,20 +787,22 @@ def _copied(plan, target, aid, source, force, stamps, signed=None):
                              reason='not recorded, and identical: adopted')
         if not _forced(aid, target, force):
             if reason:
-                return plan.skip(target, aid, ADOPTED, reason, content=source, src=shipped)
+                return plan.skip(target, aid, ADOPTED, reason, content=source,
+                                 src=shipped, sign=here)
             return plan.skip(target, aid, 'FOREIGN',
                              'not recorded, and differs' + KEEP_IT % target,
-                             content=source, src=shipped)
+                             content=source, src=shipped, sign=here)
         return take('FOREIGN')
 
     if state == stamp.HAND_EDITED:
         if not _forced(aid, target, force):
             keep()
             if reason:
-                return plan.skip(target, aid, ADOPTED, reason, content=source, src=shipped)
+                return plan.skip(target, aid, ADOPTED, reason, content=source,
+                                 src=shipped, sign=here)
             return plan.skip(target, aid, 'LOCAL',
                              'edited here since we wrote it' + KEEP_IT % target,
-                             content=source, src=shipped)
+                             content=source, src=shipped, sign=here)
         return take('LOCAL')
 
     # Recorded and unedited. The only question left is whether the package moved.
@@ -873,18 +875,21 @@ def _unstamped(plan, path, aid, new, cur, src, force, volatile, stamps, signed=N
         return plan.noop(path, aid, verdict='FOREIGN',
                          reason='not recorded, and identical: adopted')
     reason = signed_for((signed or {}).get(path), cur, volatile, src)
+    signable = stamp.body_sha(cur, volatile)
     if state in ('FOREIGN', stamp.HAND_EDITED) and aid not in force and reason:
         keep()
-        return plan.skip(path, aid, ADOPTED, reason, src=src)
+        return plan.skip(path, aid, ADOPTED, reason, src=src, sign=signable)
     if state == 'FOREIGN' and aid not in force:
         keep()
         return plan.skip(path, aid, 'FOREIGN',
                          'no record of this package writing it, and it differs from what '
-                         'would be written' + TAKE_IT % aid, src=src)
+                         'would be written' + TAKE_IT % aid
+                         + KEEP_IT % path, src=src, sign=signable)
     if state == stamp.HAND_EDITED and aid not in force:
         keep()
         return plan.skip(path, aid, stamp.HAND_EDITED,
-                         'hand-edited; not overwritten' + TAKE_IT % aid, src=src)
+                         'hand-edited; not overwritten' + TAKE_IT % aid
+                         + KEEP_IT % path, src=src, sign=signable)
     return write(state)
 
 

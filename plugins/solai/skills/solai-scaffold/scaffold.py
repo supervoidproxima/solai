@@ -192,14 +192,12 @@ def file_mode(root, pkg, answers, arch, o):
               'vault keeps against what the package ships.' % (path, row.verdict or row.kind))
         return 1
 
-    art = None
-    for a in arch.artefacts:
-        if a.get('path') == path:
-            art = a
-    volatile = (art or {}).get('volatile')
+    # The sha comes off the plan row rather than being computed again here. Whether
+    # volatile lines are stripped first is known only where the comparison is made, and
+    # `registry.base` is precisely the artefact where they are.
     target = os.path.join(root, '_system', 'os', 'adopted.toml')
     head = '' if os.path.exists(fsplan.w(target)) else HEAD_ADOPTED
-    out = ROW_ADOPTED_FILE % (path, ST.body_sha(here, volatile), row.src or '',
+    out = ROW_ADOPTED_FILE % (path, row.sign or ST.body_sha(here), row.src or '',
                               o['because'], engine._today())
     with open(fsplan.w(target), 'a', encoding='utf-8', newline='\n') as fh:
         fh.write(head + out)
