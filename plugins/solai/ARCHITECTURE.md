@@ -39,7 +39,7 @@ Read top to bottom as a single `--apply` travels it.
 | 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 330 assertions |
 | 4 | Plan and write | four write modes, region merge, rollback manifest | `lib/fsplan.py`, `lib/regions.py`, `lib/stamp.py` | `--plan` default; applying twice is provably a no-op |
 | 5 | Storage | the vault: Markdown plus YAML, and its compiled declarations | the vault, `_system/os/` | `runtime/validate_cards.py`, `check_links.py` |
-| 6 | Knowledge | a built `kb/`: one record per citable unit, SQLite FTS, a manifest | `skills/solai-kb/` | four build refusals; **no skill surface, see below** |
+| 6 | Knowledge | a built `kb/`: one record per citable unit, SQLite FTS, a manifest | `skills/solai-kb/` | four build refusals; `tests/test_kb.py`, 25 assertions |
 | 7 | Safety | refusals, the human gate, the personal-data guard | `skills/solai/refusals.md`, `runtime/check_sensitive.py` | `tests/test_sensitive.py`, D19 |
 | 8 | Verification | three gates, run last, immediately before a push | `tests/`, `skills/solai-release/` | `release.py` refuses a dirty tree outright |
 | 9 | Observability | a build ledger and a dashboard. No traces, no metrics | `_system/os/build.md`, `runtime/gen_dashboard.py` | **thin, see below** |
@@ -116,10 +116,16 @@ conditions that matter more than recall does: a cloud placeholder that is not re
 a citation anchor that is not in the text it came from, a non-deterministic rebuild of an
 unchanged corpus, and a record count that fell further than the allowed margin.
 
-**This layer is unreachable.** It has no `SKILL.md`, no tests, no CHANGELOG row, and no
-mention in `README.md`. Three substantial scripts ship in the package and nothing routes to
-them. The handoff note of 2026-09-03 already recorded it. It is the largest single gap in this
-architecture and it is `R-1` on the roadmap.
+`SKILL.md` is the surface, with `build`, `ask` and `site` as its verbs, `kb.example.toml`
+as the exemplar its rules file is copied from, and `--dry-run` before a real build by the same
+rule that puts `--plan` before `--apply` everywhere else. `tests/test_kb.py` builds a vault in
+a temporary folder and asserts what is selected, what is refused by name, what lands on disk,
+and that the same corpus rebuilds to the same bytes.
+
+Two gates are asserted structurally rather than exercised, and the test module says so on its
+face: the cloud placeholder check, because no test can make a file Windows reports as living
+somewhere else, and nothing at all about whether the selection rules select the right
+documents, which is a human reading of the refusal list in the manifest.
 
 ## 7. Safety
 
@@ -182,10 +188,10 @@ which is why they are in a table rather than in a backlog.
 
 An architecture document is a projection of a system, and this package's own doctrine says a
 projection that is not generated will drift. This one is hand-written and therefore will.
-Three things already drifted before it existed: `README.md` says doctrine holds 18 principles
-and it holds 19; the `Layout` block in it omits `skills/solai-kb/` and `skills/solai-release/`;
-and `tests/README.md` has now been found stale twice, at 178 against 241 and at 266 against
-330.
+Three things already drifted before it existed: `README.md` said doctrine holds 18 principles
+against 19; its `Layout` block omitted `skills/solai-kb/` and `skills/solai-release/`; and
+`tests/README.md` has now been found stale three times, at 178 against 241, at 266 against 330,
+and in six places at 0.28.0.
 
 The rule for this file is therefore the same one the test README carries: **counts are read
 off the thing, never copied forward**, and the version at the top is updated in the same commit

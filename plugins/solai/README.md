@@ -83,7 +83,7 @@ skills/solai/        the persona you talk to
 skills/solai-scaffold/  the engine
 skills/solai-adopt/  the read-only probe
 skills/solai-release/   the release order: gates last, immediately before the push
-skills/solai-kb/     a knowledge base built out of a vault. No skill surface yet (ROADMAP R-1)
+skills/solai-kb/     a knowledge base built out of a vault: build, ask, render a registry
 lib/                 primitives (fm, stamp, regions, fsplan), declarations, emitters
 archetypes/          minimal, project, personal, role
 runtime/             copied into each vault: validator, stamp check, link check, dashboard

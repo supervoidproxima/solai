@@ -26,7 +26,7 @@ card that records whether the date was met.
 
 | ID | What | Why now | Status |
 |---|---|---|---|
-| **R-1** | Give `solai-kb` a skill surface: `SKILL.md`, a CHANGELOG row, a `Layout` line, and assertions | Three substantial scripts ship in the package and nothing routes to them. A layer with no surface is a layer that is not in the product, and the handoff of 2026-09-03 already recorded it. It is the only place in the package where D1 and D18 are both failing | `open` |
+| **R-1** | Give `solai-kb` a skill surface: `SKILL.md`, a CHANGELOG row, a `Layout` line, and assertions | Three substantial scripts ship in the package and nothing routes to them. A layer with no surface is a layer that is not in the product, and the handoff of 2026-09-03 already recorded it. It is the only place in the package where D1 and D18 are both failing | `done`, row 60 |
 | **R-2** | Migrate the Counselor vault | The vault it was built for cannot take a release until it is migrated, and it now keeps `platform` and `subject` through an upgrade | `open`, blocked: the post-holder has 12 uncommitted files and a bundle does not cover uncommitted work |
 | **R-3** | Refresh `README.md` against the package | It said doctrine holds 18 principles and it holds 19; its `Layout` omitted two skills. Small, and it is the first file anyone reads | `done`, with this file |
 

@@ -1,0 +1,29 @@
+# The exemplar named in SKILL.md. Copy it beside the output folder, change the paths,
+# and run the build with --dry-run until the refusal counts read the way you intend.
+#
+# This file is the whole statement of what may be answered from. Nothing outside
+# include.paths is read, and exclude wins over include wherever they overlap.
+
+name  = "example"
+vault = "C:/Users/you/Obsidian Vaults/Example"
+
+[include]
+paths = ["sources/regulations/*.md", "registry/**/*.md"]
+
+[exclude]
+# Drafts and archived cards are on the disk and are not evidence.
+paths  = ["**/_inbox/**", "**/archive/**", "**/*-A.md"]
+status = ["draft", "archived", "superseded"]
+
+[granularity]
+# A regulation is cited by clause, so it is split into numbered clauses.
+clause = ["ird"]
+# A card is cited whole: it is already one claim with one id.
+card   = ["gap", "resolution", "pain", "proposal", "question", "deliverable"]
+
+[chunk]
+max_chars = 1800
+
+[gates]
+# The record count may fall this far between builds before the build refuses.
+max_shrink_pct = 10

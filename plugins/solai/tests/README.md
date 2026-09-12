@@ -4,7 +4,7 @@ Four commands, all run from `~/.claude/solai/plugins/solai`. Run the first two a
 change; the last two run inside `verify_engine.py` and can also be pointed at a place by hand.
 
 ```
-python tests/run_tests.py                        # 330 assertions
+python tests/run_tests.py                        # 355 assertions
 python tests/verify_engine.py                    # four archetypes, applied twice, checked, probed
 python tests/check_workflow_js.py <place>        # every projected script is real JavaScript
 python tests/check_workflow_resume.py <place>    # every script replays identically
@@ -23,10 +23,11 @@ Each exits 0 only when green, so any of them can gate a commit.
 | `test_workflows.py` | 34 | 22 on a workflow declaration, 12 on the workflow emitter |
 | `test_authoring.py` | 35 | the renderers, the manifest wiring, the refusals, `class add\|rename\|retire` |
 | `test_ui.py` | 55 | 9 declarations, 6 the gate, 4 argv, 5 tier, 31 the page |
+| `test_kb.py` | 25 | 7 a build end to end, 5 provenance, 6 the refusals, 4 retrieval, 3 the surface |
 | `test_sensitive.py` | 11 | what `check_sensitive.py` finds, and what it refuses to print |
 | `test_change.py` | 7 | claiming a change number, including sixteen threads racing for one |
 | `test_release.py` | 6 | the order of a release, and each refusal naming itself |
-| **total** | **330** | |
+| **total** | **355** | |
 
 This table was stale on 2026-09-03 - it named 178 against a suite of 241, omitted `test_ui.py`
 entirely, and understated `test_primitives.py` by 17. It was stale again on 2026-09-12, at 266
@@ -36,7 +37,7 @@ reading has been done only because something else brought a hand to this file.
 
 Every assertion carries a stable id, and the runner **refuses a run whose assertion count does
 not match the declared expectation** - a deleted assertion is a silently weakened gate,
-so 329 of 330 passing is red for the same reason a failure is. Adding an assertion means
+so 354 of 355 passing is red for the same reason a failure is. Adding an assertion means
 raising `EXPECTED`
 in the module that owns it. That friction is deliberate: the count is part of the gate.
 
