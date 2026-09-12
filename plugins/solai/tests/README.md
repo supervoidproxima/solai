@@ -4,7 +4,7 @@ Four commands, all run from `~/.claude/solai/plugins/solai`. Run the first two a
 change; the last two run inside `verify_engine.py` and can also be pointed at a place by hand.
 
 ```
-python tests/run_tests.py                        # 415 assertions
+python tests/run_tests.py                        # 417 assertions
 python tests/verify_engine.py                    # four archetypes, applied twice, checked, probed
 python tests/check_workflow_js.py <place>        # every projected script is real JavaScript
 python tests/check_workflow_resume.py <place>    # every script replays identically
@@ -18,7 +18,7 @@ Each exits 0 only when green, so any of them can gate a commit.
 |---|---:|---|
 | `test_primitives.py` | 67 | `fm` 14, `stamp` 16, `regions` 13, `fsplan` 8, materials 6, language 6, START-HERE 4 |
 | `test_decl.py` | 61 | 27 on one class, 31 on an archetype set, 3 on the card-skill emitter |
-| `test_compiled.py` | 54 | 7 on loading a vault's own declarations, 7 on the fate of a hand edit, 11 on the upgrade merge, 4 on a vault with no manifest, 3 on the folder a kept class lives in, 4 on a class both sides declare, 7 on an artefact whose format holds no stamp, 6 on the six fates of a copied file, 5 on signing for a whole file |
+| `test_compiled.py` | 56 | 7 on loading a vault's own declarations, 7 on the fate of a hand edit, 11 on the upgrade merge, 4 on a vault with no manifest, 3 on the folder a kept class lives in, 4 on a class both sides declare, 7 on an artefact whose format holds no stamp, 6 on the six fates of a copied file, 7 on signing for a whole file |
 | `test_agents.py` | 34 | 22 on an agent declaration, 12 on the agent emitter |
 | `test_workflows.py` | 34 | 22 on a workflow declaration, 12 on the workflow emitter |
 | `test_authoring.py` | 35 | the renderers, the manifest wiring, the refusals, `class add\|rename\|retire` |
@@ -29,7 +29,7 @@ Each exits 0 only when green, so any of them can gate a commit.
 | `test_release.py` | 6 | the order of a release, and each refusal naming itself |
 | `test_args.py` | 14 | the shared argument reader, and every shipped script routed through it |
 | `test_wikilink.py` | 12 | the shared wikilink pattern, the five readers routed through it, and the escaped pipe a table cell requires |
-| **total** | **415** | |
+| **total** | **417** | |
 
 This table was stale on 2026-09-03 - it named 178 against a suite of 241, omitted `test_ui.py`
 entirely, and understated `test_primitives.py` by 17. It was stale again on 2026-09-12, at 266

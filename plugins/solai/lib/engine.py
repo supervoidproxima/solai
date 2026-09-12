@@ -788,10 +788,10 @@ def _copied(plan, target, aid, source, force, stamps, signed=None):
         if not _forced(aid, target, force):
             if reason:
                 return plan.skip(target, aid, ADOPTED, reason, content=source,
-                                 src=shipped, sign=here)
+                                 src=shipped, sign=here, theirs=shipped)
             return plan.skip(target, aid, 'FOREIGN',
                              'not recorded, and differs' + KEEP_IT % target,
-                             content=source, src=shipped, sign=here)
+                             content=source, src=shipped, sign=here, theirs=shipped)
         return take('FOREIGN')
 
     if state == stamp.HAND_EDITED:
@@ -799,10 +799,10 @@ def _copied(plan, target, aid, source, force, stamps, signed=None):
             keep()
             if reason:
                 return plan.skip(target, aid, ADOPTED, reason, content=source,
-                                 src=shipped, sign=here)
+                                 src=shipped, sign=here, theirs=shipped)
             return plan.skip(target, aid, 'LOCAL',
                              'edited here since we wrote it' + KEEP_IT % target,
-                             content=source, src=shipped, sign=here)
+                             content=source, src=shipped, sign=here, theirs=shipped)
         return take('LOCAL')
 
     # Recorded and unedited. The only question left is whether the package moved.
@@ -874,22 +874,27 @@ def _unstamped(plan, path, aid, new, cur, src, force, volatile, stamps, signed=N
             stamps.put(path, mine)
         return plan.noop(path, aid, verdict='FOREIGN',
                          reason='not recorded, and identical: adopted')
-    reason = signed_for((signed or {}).get(path), cur, volatile, src)
+    # What the package would put here, rather than the source sha: `source_sha` carries
+    # the package version, so it moves on every release and a signature given before one
+    # would report that the package had changed a file it had not touched.
+    theirs = mine[stamp.KEY_BODY]
+    reason = signed_for((signed or {}).get(path), cur, volatile, theirs)
     signable = stamp.body_sha(cur, volatile)
     if state in ('FOREIGN', stamp.HAND_EDITED) and aid not in force and reason:
         keep()
-        return plan.skip(path, aid, ADOPTED, reason, src=src, sign=signable)
+        return plan.skip(path, aid, ADOPTED, reason, src=src, sign=signable,
+                         theirs=theirs)
     if state == 'FOREIGN' and aid not in force:
         keep()
         return plan.skip(path, aid, 'FOREIGN',
                          'no record of this package writing it, and it differs from what '
                          'would be written' + TAKE_IT % aid
-                         + KEEP_IT % path, src=src, sign=signable)
+                         + KEEP_IT % path, src=src, sign=signable, theirs=theirs)
     if state == stamp.HAND_EDITED and aid not in force:
         keep()
         return plan.skip(path, aid, stamp.HAND_EDITED,
                          'hand-edited; not overwritten' + TAKE_IT % aid
-                         + KEEP_IT % path, src=src, sign=signable)
+                         + KEEP_IT % path, src=src, sign=signable, theirs=theirs)
     return write(state)
 
 

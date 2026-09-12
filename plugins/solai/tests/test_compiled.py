@@ -59,6 +59,11 @@ the branch documented as a skip wrote over them anyway. The stamp moved beside t
 state with no record splits by evidence rather than by assumption: identical to what would be
 written is proof of authorship, and different is proof of nothing.
 
+`CP-54` and `CP-55` are the same for an artefact whose format holds no stamp, and the
+false alarm found by signing for a real one: the package's side of the comparison is what
+would be WRITTEN, never the source sha, which carries the package version and therefore
+moves on every release.
+
 `CP-49` to `CP-53` are `RES-014`: a whole file can be signed for, the way a region already
 could. The signature is over the bytes it was given for and it says what the package has
 done since, so a vault that keeps its own copy stops being told, on every run forever, that
@@ -82,7 +87,7 @@ import tempfile
 from lib import decl, engine, fsplan, regions, stamp
 from lib.emit import bases
 
-EXPECTED = 54
+EXPECTED = 56
 NAME = 'compiled'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -539,11 +544,12 @@ def _one(tmp, name, body=None):
     return root
 
 
-def _plan_base(root, body=BASE_BODY, src='aaaaaaaaaaaaaaaa', force=(), stamps=None):
+def _plan_base(root, body=BASE_BODY, src='aaaaaaaaaaaaaaaa', force=(), stamps=None,
+               signed=None):
     plan = fsplan.Plan(root, '0.32.0')
     st = stamps if stamps is not None else engine.Stamps()
     engine._generated(plan, 'registry.base', 'registry-base', body, src, force,
-                      volatile=bases.VOLATILE, fmeta=None, stamps=st)
+                      volatile=bases.VOLATILE, fmeta=None, stamps=st, signed=signed)
     return plan.actions[0], st
 
 
@@ -613,6 +619,26 @@ def group_unstamped(s):
                       'apply no longer discards column widths',
              act.kind == fsplan.NOOP and st.next == rec,
              repr((act.kind, act.verdict, act.reason)))
+
+        # RES-014 in this branch too. A vault's hand-built base is the case it was met on.
+        ours = BASE_BODY + '    nine views this vault built itself\n'
+        root = _one(tmp, 'signed-base', ours)
+        unsigned, _st = _plan_base(root, body=BASE_BODY)
+        sig = {'registry.base': {'body-sha': unsigned.sign, 'because': 'CHG-153',
+                                 'package-sha': unsigned.theirs}}
+        act, st = _plan_base(root, body=BASE_BODY, signed=sig)
+        s.ok('CP-54', 'a hand-built artefact that carries no stamp can be signed for, and is '
+                      'still skipped and still never overwritten',
+             act.kind == fsplan.SKIP and act.verdict == engine.ADOPTED
+             and 'CHG-153' in act.reason, repr((act.kind, act.verdict, act.reason)))
+
+        # The false alarm. `source_sha` carries the package version, so comparing it would
+        # report a change to this file every time ANY release happened.
+        act, st = _plan_base(root, body=BASE_BODY, src='a-later-release', signed=sig)
+        s.ok('CP-55', 'a release alone does not make a signature claim the package changed '
+                      'the file: what is compared is what would be written',
+             act.verdict == engine.ADOPTED and 'changed it since' not in act.reason,
+             repr((act.verdict, act.reason)))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

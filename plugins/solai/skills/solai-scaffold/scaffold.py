@@ -197,7 +197,7 @@ def file_mode(root, pkg, answers, arch, o):
     # `registry.base` is precisely the artefact where they are.
     target = os.path.join(root, '_system', 'os', 'adopted.toml')
     head = '' if os.path.exists(fsplan.w(target)) else HEAD_ADOPTED
-    out = ROW_ADOPTED_FILE % (path, row.sign or ST.body_sha(here), row.src or '',
+    out = ROW_ADOPTED_FILE % (path, row.sign or ST.body_sha(here), row.theirs or '',
                               o['because'], engine._today())
     with open(fsplan.w(target), 'a', encoding='utf-8', newline='\n') as fh:
         fh.write(head + out)

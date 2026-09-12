@@ -66,17 +66,20 @@ def bytes_sha(path):
 
 class Action(object):
     __slots__ = ('kind', 'path', 'content', 'src', 'artefact', 'verdict', 'reason',
-                 'detail', 'sign')
+                 'detail', 'sign', 'theirs')
 
     def __init__(self, kind, path, artefact, content=None, src=None,
-                 verdict=None, reason='', detail='', sign=None):
+                 verdict=None, reason='', detail='', sign=None, theirs=None):
         self.kind, self.path, self.artefact = kind, path, artefact
         self.content, self.src = content, src
         self.verdict, self.reason, self.detail = verdict, reason, detail
-        # The sha a signature over this file has to carry. Computed where the comparison
-        # is made, because only there is it known whether volatile lines are stripped
-        # first - and a `.base` that Obsidian has opened is exactly that case.
-        self.sign = sign
+        # Both sides of the comparison a signature is checked by, computed where the
+        # comparison is made. `sign` is the vault's file: only here is it known whether
+        # volatile lines are stripped first, and a `.base` Obsidian has opened is exactly
+        # that case. `theirs` is the package's side, and it is deliberately NOT the source
+        # sha: that carries the package version, so it moves on every release and a
+        # signature would report a change to a file nothing had changed.
+        self.sign, self.theirs = sign, theirs
 
     @property
     def rel(self):
@@ -105,12 +108,13 @@ class Plan(object):
         return self.add(Action(NOOP, rel, artefact, verdict=verdict, reason=reason))
 
     def skip(self, rel, artefact, verdict, reason, detail='', content=None, src=None,
-             sign=None):
+             sign=None, theirs=None):
         # A skipped row carries what it would have done: the source it would have copied,
         # or the sha it would have written against. Nothing applies a SKIP, so these are
         # inert to the apply and are the whole of what `--diff` and `--adopt <path>` read.
         return self.add(Action(SKIP, rel, artefact, verdict=verdict, reason=reason,
-                               detail=detail, content=content, src=src, sign=sign))
+                               detail=detail, content=content, src=src, sign=sign,
+                               theirs=theirs))
 
     def copy(self, rel, artefact, source_path, verdict=None, reason=''):
         return self.add(Action(COPY, rel, artefact, content=source_path,
