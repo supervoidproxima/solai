@@ -29,9 +29,10 @@ vault-local. So an emitter fix reaches every vault on a plain `--apply`, and onl
 declaration change needs `--from-package`.
 
 `--from-package` MERGES, it does not replace. The package wins wherever both declare the
-same class, and a class this vault declares alone is kept with its folder, its skill and its
-place in the manifest. Replacing whole was the first behaviour and it deleted `deliverable`
-from the vault that invented it. The rules and the reasoning are in `decl.load_merged`.
+same thing, and a class, lookup, agent or workflow this vault declares alone is kept, with its
+folder, its projection and its place in the manifest. Replacing whole was the first behaviour
+and it deleted `deliverable` from the vault that invented it. The rules and the reasoning are
+in `decl.load_merged`.
 """
 import os
 import sys
@@ -230,8 +231,9 @@ def main():
             print('  declarations: this vault  (_system/os)')
         elif o['from_package'] and built_before:
             # An upgrade MERGES rather than replaces. The package wins everywhere the two
-            # declare the same thing, and a class this vault declares alone is kept, because
-            # re-importing whole used to delete it along with its folder and its skill.
+            # declare the same thing, and a declaration this vault alone carries is kept -
+            # class, lookup, agent or workflow - because re-importing whole used to delete it
+            # along with its folder and its projection.
             arch, notes = decl.load_merged(PKG, root, archetype)
             print('  declarations: package  (archetypes/%s), re-imported on request; %d '
                   'declared only by this vault, kept: %s'

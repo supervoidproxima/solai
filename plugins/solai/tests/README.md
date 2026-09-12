@@ -4,7 +4,7 @@ Four commands, all run from `~/.claude/solai/plugins/solai`. Run the first two a
 change; the last two run inside `verify_engine.py` and can also be pointed at a place by hand.
 
 ```
-python tests/run_tests.py                        # 266 assertions
+python tests/run_tests.py                        # 330 assertions
 python tests/verify_engine.py                    # four archetypes, applied twice, checked, probed
 python tests/check_workflow_js.py <place>        # every projected script is real JavaScript
 python tests/check_workflow_resume.py <place>    # every script replays identically
@@ -18,7 +18,7 @@ Each exits 0 only when green, so any of them can gate a commit.
 |---|---:|---|
 | `test_primitives.py` | 62 | `fm` 14, `stamp` 11, `regions` 13, `fsplan` 8, materials 6, language 6, START-HERE 4 |
 | `test_decl.py` | 61 | 27 on one class, 31 on an archetype set, 3 on the card-skill emitter |
-| `test_compiled.py` | 21 | 7 on loading a vault's own declarations, 7 on the fate of a hand edit, 7 on the upgrade merge |
+| `test_compiled.py` | 25 | 7 on loading a vault's own declarations, 7 on the fate of a hand edit, 11 on the upgrade merge |
 | `test_agents.py` | 34 | 22 on an agent declaration, 12 on the agent emitter |
 | `test_workflows.py` | 34 | 22 on a workflow declaration, 12 on the workflow emitter |
 | `test_authoring.py` | 35 | the renderers, the manifest wiring, the refusals, `class add\|rename\|retire` |
@@ -26,7 +26,7 @@ Each exits 0 only when green, so any of them can gate a commit.
 | `test_sensitive.py` | 11 | what `check_sensitive.py` finds, and what it refuses to print |
 | `test_change.py` | 7 | claiming a change number, including sixteen threads racing for one |
 | `test_release.py` | 6 | the order of a release, and each refusal naming itself |
-| **total** | **326** | |
+| **total** | **330** | |
 
 This table was stale on 2026-09-03 - it named 178 against a suite of 241, omitted `test_ui.py`
 entirely, and understated `test_primitives.py` by 17. It was stale again on 2026-09-12, at 266
@@ -36,7 +36,7 @@ reading has been done only because something else brought a hand to this file.
 
 Every assertion carries a stable id, and the runner **refuses a run whose assertion count does
 not match the declared expectation** - a deleted assertion is a silently weakened gate,
-so 265 of 266 passing is red for the same reason a failure is. Adding an assertion means
+so 329 of 330 passing is red for the same reason a failure is. Adding an assertion means
 raising `EXPECTED`
 in the module that owns it. That friction is deliberate: the count is part of the gate.
 
@@ -81,10 +81,10 @@ engine's pass state resting on someone's word about a run nobody could repeat.
 
 | Archetype | Language | NOOP rows | Agents | Workflows |
 |---|---|---:|---:|---:|
-| minimal | en | 6 | 0 | 0 |
-| project | en | 42 | 5 | 3 |
-| personal | **ru** | 30 | 2 | 0 |
-| role | en | 34 | 4 | 2 |
+| minimal | en | 8 | 0 | 0 |
+| project | en | 49 | 5 | 3 |
+| personal | **ru** | 37 | 2 | 0 |
+| role | en | 41 | 5 | 2 |
 
 Plus, per archetype that ships the checkers: 0 BLOCKER, 0 GATE, every stamped item clean, 0
 broken links. `personal` runs in Russian because the label files are exercised nowhere else.

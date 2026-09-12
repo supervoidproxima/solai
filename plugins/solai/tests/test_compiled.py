@@ -32,7 +32,7 @@ import tempfile
 
 from lib import decl, engine, regions, stamp
 
-EXPECTED = 21
+EXPECTED = 25
 NAME = 'compiled'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -106,13 +106,16 @@ def _write(path, text):
         fh.write(text)
 
 
-def _vault(tmp, manifest=MANIFEST, classes=None, lookups=()):
+def _vault(tmp, manifest=MANIFEST, classes=None, lookups=(), agents=(), workflows=()):
     """A throwaway vault carrying only its compiled declarations."""
     root = tempfile.mkdtemp(prefix='solai-test-vault-', dir=tmp)
     os_dir = os.path.join(root, '_system', 'os')
     _write(os.path.join(os_dir, 'manifest.toml'), manifest)
     for name, text in (classes if classes is not None else {'alpha': CLASS}).items():
         _write(os.path.join(os_dir, 'classes', '%s.toml' % name), text)
+    for kind, given in (('agents', agents), ('workflows', workflows)):
+        for name, text in dict(given).items():
+            _write(os.path.join(os_dir, kind, '%s.toml' % name), text)
     return root
 
 
@@ -265,6 +268,50 @@ def group_merge(s):
                      'classes = ["gap", "resolution", "pain", "proposal", "question"]',
                      'classes = [\n  "gap",\n]'), 'classes', ['gap']),
                  'single-line array', exc=decl.DeclError)
+
+        # ------------------------------------------------- agents and workflows, same rule
+        # A vault may declare an agent or a workflow of its own for the same reason it may
+        # declare a class: `load_compiled` discovers all three by listing a directory. The
+        # first release of this loader guarded classes alone and named the rest as uncovered,
+        # which is an argument about today's vaults rather than about the rule.
+        # Derived from what the package actually ships, renamed, rather than a second copy of
+        # a fixture that would drift away from the loader it is meant to satisfy.
+        proj_agent = decl._read_text(os.path.join(PKG_ROOT, 'common', 'agents', 'scout.toml'))
+        proj_wf = decl._read_text(os.path.join(PKG_ROOT, 'common', 'workflows', 'review.toml'))
+        mine_a = proj_agent.replace('agent = "scout"', 'agent = "probe"', 1)
+        assert 'agent = "probe"' in mine_a, 'the scout fixture edit found nothing'
+        mine_w = proj_wf.replace('workflow = "review"', 'workflow = "probe-job"', 1)
+
+        root = _vault(tmp, manifest=decl._relist(
+            decl._relist(decl._relist(proj, 'classes', []), 'agents', ['probe', 'scout']),
+            'workflows', ['probe-job']),
+            classes={}, agents={'probe': mine_a, 'scout': proj_agent},
+            workflows={'probe-job': mine_w})
+        arch, notes = decl.load_merged(PKG_ROOT, root, 'project')
+
+        s.ok('CP-22', 'an agent the vault declares alone survives the upgrade and is named',
+             'probe' in [a.name for a in arch.agents]
+             and any("agents: 'probe'" in n and 'Kept' in n for n in notes),
+             repr(([a.name for a in arch.agents], notes)))
+
+        s.ok('CP-23', 'a workflow the vault declares alone survives the upgrade',
+             'probe-job' in [w.name for w in arch.workflows]
+             and any("workflows: 'probe-job'" in n and 'Kept' in n for n in notes),
+             repr([w.name for w in arch.workflows]))
+
+        s.ok('CP-24', 'an agent declared by both resolves to the PACKAGE file, silently',
+             os.path.abspath(arch.agent('scout').path).startswith(
+                 os.path.abspath(os.path.join(PKG_ROOT, 'common')))
+             and not any("agents: 'scout'" in n for n in notes),
+             repr((arch.agent('scout').path, notes)))
+
+        s.ok('CP-25', 'the merged manifest names the kept agent and workflow, and the lists '
+                      'that gained nothing are left exactly as the package wrote them',
+             '"probe"' in arch.manifest_text and '"probe-job"' in arch.manifest_text
+             and 'lookups = []' in arch.manifest_text
+             and arch.manifest_text.count('classes = ["gap"') == 1,
+             repr([l for l in arch.manifest_text.split('\n')
+                   if l.startswith(('classes', 'lookups', 'agents', 'workflows'))]))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

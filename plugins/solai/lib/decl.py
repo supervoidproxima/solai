@@ -858,29 +858,38 @@ def _relist(body, key, names):
 
 
 def load_merged(pkg_root, vault_root, name):
-    """Upgrade load: the package archetype, PLUS the classes this vault has and it does not.
+    """Upgrade load: the package archetype, PLUS what this vault declares and it does not.
 
     -> (archetype, notes). Raises DeclError with every reason, like its two siblings.
 
     WHY THIS EXISTS. `--from-package` re-imported the archetype whole, which is right for
-    artefacts, runtime, agents and workflows and wrong for classes. A class declared in one
-    vault and deliberately not written back into the archetype - this vault's `deliverable`,
-    the counselor's `platform` and `subject` - vanished on upgrade, taking its folder, its
+    artefacts and runtime and wrong for declarations. A class declared in one vault and
+    deliberately not written back into the archetype - this vault's `deliverable`, the
+    counselor's `platform` and `subject` - vanished on upgrade, taking its folder, its
     skill, its view and its row in every generated index with it. An upgrade that deletes a
     class the vault is using is not an upgrade, and D19 says nothing is deleted by a script.
 
-    THE THREE CASES. Only the third is a judgement:
+    THE THREE CASES, applied to classes, lookups, agents and workflows alike. Only the third
+    is a judgement:
 
       package only  -> taken. This is what upgrading means.
       vault only    -> KEPT. Nobody asked for it to go, and the vault is using it.
       both          -> the PACKAGE wins, and the note says so by name, because an upgrade
                        whose declarations lose to the copy already on disk upgrades nothing.
-                       A vault that wants to keep its own version of a class the package has
-                       since adopted renames it first; that is what `class rename` is for.
+                       A vault that wants to keep its own version of a declaration the package
+                       has since adopted renames it first; that is what `class rename` is for.
 
-    A kept class keeps its OWN path, inside `_system/os/classes/`, so the engine plans a
-    write of the file over itself and the row reads NOOP. The merged manifest is rendered
-    here rather than copied, because the package manifest does not list the kept names and a
+    ALL FOUR KINDS, not just classes. The first release of this loader guarded classes and
+    named agents and workflows as uncovered, on the reasoning that no vault declared one of
+    its own. That is an argument about today's vaults and not about the rule: an agent is
+    compiled into `_system/os/agents/` exactly as a class is, `load_compiled` discovers it by
+    listing the directory exactly as it discovers a class, and a vault that writes one has
+    done nothing the engine tells it not to. The failure would have been identical and the
+    excuse would have been worse for having been written down.
+
+    A kept declaration keeps its OWN path, inside `_system/os/`, so the engine plans a write
+    of the file over itself and the row reads NOOP. The merged manifest is rendered here
+    rather than copied, because the package manifest does not list the kept names and a
     compiled manifest that does not list what is beside it is the drift this loader reports.
     """
     pkg = load_archetype(pkg_root, name)
@@ -893,34 +902,58 @@ def load_merged(pkg_root, vault_root, name):
     local, notes, errors = _compiled(vault_root)
     if errors:
         raise DeclError(errors)
-    have = set(c.name for c in pkg.classes) | set(c.name for c in pkg.lookups)
-    class_names, lookup_names = list(pkg.class_names), list(pkg.lookup_names)
-    by_name = dict((d.name, d) for d in pkg.classes + pkg.lookups)
-    for c in local.classes + local.lookups:
-        if c.name in have:
-            # Reported only where the two files actually differ. A note on all five of an
-            # unchanged set buries the one row that matters, and "is overwritten" is not
-            # true of a byte-identical file: the engine plans that row as a NOOP.
-            if _read_text(c.path) != _read_text(by_name[c.name].path):
-                notes.append('classes: %r is declared by both and the two differ. The package '
-                             'declaration wins; this vault\'s copy is overwritten.' % c.name)
-            continue
-        if c.name in local.lookup_names:
-            pkg.lookups.append(c)
-            lookup_names.append(c.name)
-        else:
-            pkg.classes.append(c)
-            class_names.append(c.name)
-        pkg.kept.append(c.name)
-        notes.append('classes: %r is declared by this vault and not by the %s archetype. '
-                     'Kept.' % (c.name, name))
+
+    lists = {'classes': list(pkg.class_names), 'lookups': list(pkg.lookup_names),
+             'agents': list(pkg.agent_names), 'workflows': list(pkg.workflow_names)}
+    widened = set()
+
+    def consider(kind, mine, theirs, take):
+        """`mine` from the vault, `theirs` the package declarations of the same kind."""
+        have = dict((d.name, d) for d in theirs)
+        for d in mine:
+            if d.name in have:
+                # Reported only where the two files actually differ. A note on all five of
+                # an unchanged set buries the one row that matters, and "is overwritten" is
+                # not true of a byte-identical file: the engine plans that row as a NOOP.
+                if _read_text(d.path) != _read_text(have[d.name].path):
+                    notes.append('%s: %r is declared by both and the two differ. The package '
+                                 "declaration wins; this vault's copy is overwritten."
+                                 % (kind, d.name))
+                continue
+            listed = take(d)
+            lists[listed].append(d.name)
+            widened.add(listed)
+            pkg.kept.append(d.name)
+            notes.append('%s: %r is declared by this vault and not by the %s archetype. '
+                         'Kept.' % (kind, d.name, name))
+
+    def take_card(d):
+        """A lookup on this vault's side stays a lookup: which list a declaration belongs to
+        is the vault's statement about it, and the package has no opinion about a name it
+        does not carry."""
+        if d.name in local.lookup_names:
+            pkg.lookups.append(d)
+            return 'lookups'
+        pkg.classes.append(d)
+        return 'classes'
+
+    consider('classes', local.classes + local.lookups, pkg.classes + pkg.lookups, take_card)
+    consider('agents', local.agents, pkg.agents,
+             lambda d: (pkg.agents.append(d), 'agents')[1])
+    consider('workflows', local.workflows, pkg.workflows,
+             lambda d: (pkg.workflows.append(d), 'workflows')[1])
 
     if pkg.kept:
+        # Only the lists that gained a name are rewritten. Relisting the rest would be a
+        # no-op on today's manifests and a refusal on the first one that writes an array
+        # over two lines for a key this merge never had to touch.
         body = _read_text(os.path.join(pkg.root, 'manifest.toml'))
-        body = _relist(body, 'classes', class_names)
-        body = _relist(body, 'lookups', lookup_names)
+        for key in ('classes', 'lookups', 'agents', 'workflows'):
+            if key in widened:
+                body = _relist(body, key, lists[key])
         pkg.manifest_text = body
-        pkg.class_names, pkg.lookup_names = class_names, lookup_names
+        pkg.class_names, pkg.lookup_names = lists['classes'], lists['lookups']
+        pkg.agent_names, pkg.workflow_names = lists['agents'], lists['workflows']
 
     errors = []
     _validate_set(pkg, errors)
