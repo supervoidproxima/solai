@@ -26,11 +26,12 @@ import test_authoring                                               # noqa: E402
 import test_compiled
 import test_decl                                                    # noqa: E402
 import test_primitives                                              # noqa: E402
+import test_sensitive                                               # noqa: E402
 import test_ui                                                      # noqa: E402
 import test_workflows                                               # noqa: E402
 
 MODULES = (test_primitives, test_decl, test_compiled, test_agents, test_workflows,
-           test_authoring, test_ui)
+           test_authoring, test_ui, test_sensitive)
 
 
 def main():

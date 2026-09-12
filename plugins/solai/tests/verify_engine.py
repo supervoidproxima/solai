@@ -43,6 +43,13 @@ the attachment conventions to be declared against.
 and its card skill are not written. The declaration still ships and is still installable;
 it is the building of it by default that stopped.
 
+The three card archetypes moved by one each when `check_sensitive.py` joined the copied
+runtime. It ships to every archetype that carries scripts rather than only to one that says
+it holds data about people, because the failure it guards against is a file nobody declared:
+the vault that met it had 728 children's identifiers in a sync client's conflict copy, and
+nothing in a declaration would have mentioned that file. `minimal` still takes none of the
+runtime.
+
 Every archetype then gained one more row: `_system/os/manifest.toml`, the last piece of the
 declaration to be compiled into the vault. With it a place can be regenerated from its own
 declarations rather than only validated against them.
@@ -82,9 +89,9 @@ FRESH_GATES = {'AV-3'}
 
 CASES = (
     ('minimal', 'en', 7, 0, 0),
-    ('project', 'en', 46, 5, 3),
-    ('personal', 'ru', 34, 2, 0),
-    ('role', 'en', 38, 5, 2),
+    ('project', 'en', 47, 5, 3),
+    ('personal', 'ru', 35, 2, 0),
+    ('role', 'en', 39, 5, 2),
 )
 
 ANSWERS = ('remit=A throwaway place built only to verify the engine.',
