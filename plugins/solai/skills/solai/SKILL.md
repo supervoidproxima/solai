@@ -20,8 +20,8 @@ permissions:
 
 ARGUMENTS: $ARGUMENTS
 One verb, optional: `new` · `adopt <path>` · `check [--agents]` · `class <name>` · `agent
-<name>` · `workflow <name>` · `change "<what>"` · `route "<intent>"` · `explain`. Bare `/solai`
-reports and writes nothing.
+<name>` · `workflow <name>` · `change "<what>"` · `release` · `route "<intent>"` · `explain`.
+Bare `/solai` reports and writes nothing; `release` lives in `skills/solai-release/`.
 
 Authority: **route and confirm.** Resolve, show the evidence, print the command, wait. This
 skill never writes a vault artefact itself; the engine does, and only after a gate.
