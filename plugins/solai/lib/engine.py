@@ -14,9 +14,19 @@ The five-state classifier is the whole re-run story:
 
     ABSENT  write   CLEAN  no-op   STALE  regenerate
     DIRTY   skip and report, except on a seeded file where an edit is the point
-    FOREIGN skip; the file predates us and adoption is a separate, explicit act
+    FOREIGN skip and report; nothing here has ever recorded writing it
+
+FOREIGN means "this package holds no stamp for this file", which is not the same claim as
+"a person wrote it". Two artefacts cannot hold a stamp at all - `registry.base` is bare YAML
+and `START-HERE.md` carries no frontmatter - so for years both read FOREIGN on every run of
+every vault, including one written seconds earlier, and the branch wrote over them anyway.
+Their stamps now live in `_system/os/stamps.json`, and a file with no record there is
+compared against what would be written before anything is concluded: an exact match is proof
+it is ours and the record is simply written down, and a difference is proof of nothing and is
+therefore skipped. `--force <id>` is the way back for a file that really should be taken.
 """
 import io
+import json
 import os
 import time
 import tomllib
@@ -30,6 +40,11 @@ OS_DIR = '_system/os'
 BUILD_LEDGER = OS_DIR + '/build.md'
 ANSWERS = OS_DIR + '/answers.toml'
 MANIFEST = OS_DIR + '/apply-manifest.json'
+# The stamps of artefacts whose own format cannot carry one. Engine state, like the manifest
+# beside it, and not the same file: that one holds the PRE-image for a rollback, is rewritten
+# on every apply, and carries no row at all for a file that did not change - which is the one
+# case a provenance record exists for.
+STAMPS = OS_DIR + '/stamps.json'
 BACKUP = OS_DIR + '/_backup'
 
 # Caps are a refusal, not a warning. An empty folder cannot be initialised above `light`:
@@ -105,6 +120,71 @@ def classify_file(existing, expected_src, mode, volatile=None):
         return 'SEEDED-PRESENT'
     v = stamp.verdict(existing, expected_src, volatile)
     return {stamp.UNSTAMPED: 'FOREIGN'}.get(v, v)
+
+
+def classify_recorded(existing, record, expected_src, volatile=None):
+    """The same five states for an artefact whose format carries no stamp.
+
+    `UNSTAMPED` becomes `FOREIGN` here too, but it means something weaker: no record, so this
+    package has never written down having written this file. That is the state of every vault
+    built before the record existed, and it is why the caller compares the file against what it
+    would emit before it concludes anything. A byte-for-byte match is proof of authorship; a
+    difference is not proof of anything, which is exactly why it must not be overwritten.
+    """
+    if existing is None:
+        return 'ABSENT'
+    v = stamp.verdict_recorded(existing, record, expected_src, volatile)
+    return {stamp.UNSTAMPED: 'FOREIGN'}.get(v, v)
+
+
+class Stamps(object):
+    """The stamps of artefacts whose format carries none: read at plan time, written at the end.
+
+    Two dictionaries rather than one. `existing` is what the vault came with and is never
+    mutated, because the classifier must go on answering from the same record for the whole
+    plan. `next` is what the vault will hold afterwards, and an artefact that is SKIPPED leaves
+    its entry exactly as it found it: a file this package refused to write is a file it must not
+    claim to have written.
+    """
+
+    def __init__(self, existing=None):
+        self.existing = dict(existing or {})
+        self.next = dict(self.existing)
+
+    def get(self, path):
+        return self.existing.get(path)
+
+    def put(self, path, record):
+        self.next[path] = record
+
+    @property
+    def changed(self):
+        return self.next != self.existing
+
+    def text(self, package_version):
+        """Sorted, indented, and with no timestamp in it.
+
+        A file that recorded when it was written would differ from itself on every run, so the
+        plan would carry a WRITE row forever and no second run could be a NOOP. The version is
+        in here because it is already inside every `source-sha`, so a release moves this file
+        for the same reason it moves every stamped artefact.
+        """
+        return json.dumps({'package_version': package_version,
+                           'artefacts': self.next},
+                          ensure_ascii=False, indent=2, sort_keys=True) + '\n'
+
+
+def read_stamps(root):
+    """-> {vault-relative path: record}. A missing or unreadable file is an empty record set."""
+    text = fsplan.read(os.path.join(root, STAMPS.replace('/', os.sep)))
+    if not text:
+        return {}
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return {}
+    got = data.get('artefacts')
+    return got if isinstance(got, dict) else {}
 
 
 RECONCILED = 'RECONCILED'
@@ -270,6 +350,11 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
 
     # Hand edits somebody has signed for. Keyed by artefact path, then region id, so a
     # merge only ever consults the rows written about the file it is merging.
+    # The stamps of the artefacts whose format carries none, read once. Every classification
+    # in this plan answers from the same record, and what the vault will hold afterwards is
+    # accumulated separately and written at the end.
+    stamps = Stamps(read_stamps(root))
+
     adopted_rows = read_adopted(root)
     adopted = {}
     for (art_path, rid), row in adopted_rows.items():
@@ -510,7 +595,7 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
         s = src_for('bases')
         body = bases.render(classes, arch.lookups)
         _generated(plan, art['path'], 'registry-base', body, s, force,
-                   volatile=bases.VOLATILE, fmeta=None)
+                   volatile=bases.VOLATILE, fmeta=None, stamps=stamps)
 
     # 7b start here -----------------------------------------------------------
     # Written before the seeded files and before CLAUDE.md, because it is the one a person
@@ -522,7 +607,8 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
                                       for f in arch.folders) else ''
         body = starthere.render(L, arch, classes,
                                 dict(answers, package_version=VERSION), inbox)
-        _generated(plan, art['path'], 'start-here', body, s, force, fmeta=None)
+        _generated(plan, art['path'], 'start-here', body, s, force, fmeta=None,
+                   stamps=stamps)
 
     # 8 seeded files -----------------------------------------------------------
     for art in arch.artefacts:
@@ -585,10 +671,26 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
         fmt = bond.frontmatter(answers, arch, tier, VERSION)
         _generated(plan, art['path'], 'bond', body, s, force, fmeta_text=fmt)
 
+    # 11 the stamps of what cannot carry one, written last because it records the rest ----
+    # Planned like any other write, so it is backed up, named in the apply manifest and undone
+    # by `--rollback` with everything else. Nothing at all is planned for a vault with no
+    # unstampable artefact in it: an empty record file is a file that explains nothing.
+    if stamps.next:
+        target, body = STAMPS, stamps.text(VERSION)
+        if fsplan.read(plan.path(target)) == body:
+            plan.noop(target, 'stamps')
+        else:
+            plan.write(target, 'stamps', body)
+
     return plan, L, tier
 
 
-def _generated(plan, path, aid, body, src, force, volatile=None, fmeta=None, fmeta_text=None):
+TAKE_IT = ('; take it with `--force %s`, which overwrites what is there. '
+           'There is no undoing that except `--rollback`')
+
+
+def _generated(plan, path, aid, body, src, force, volatile=None, fmeta=None, fmeta_text=None,
+               stamps=None):
     cur = fsplan.read(plan.path(path))
     if fmeta_text is not None:
         new = stamp.stamped_text(fmeta_text, body, src, GENERATED_BY, volatile)
@@ -597,7 +699,8 @@ def _generated(plan, path, aid, body, src, force, volatile=None, fmeta=None, fme
                         for k, v in fmeta.items())
         new = stamp.stamped_text(fmt, body, src, GENERATED_BY, volatile)
     else:
-        new = stamp.normalise(body)
+        return _unstamped(plan, path, aid, stamp.normalise(body), cur, src, force,
+                          volatile, stamps)
     state = classify_file(cur, src, 'generated', volatile)
     if state == 'ABSENT':
         plan.write(path, aid, new, src=src)
@@ -608,6 +711,56 @@ def _generated(plan, path, aid, body, src, force, volatile=None, fmeta=None, fme
     else:
         plan.write(path, aid, new, src=src,
                    verdict=state if state != stamp.CLEAN else 'CONTENT-CHANGED')
+
+
+def _unstamped(plan, path, aid, new, cur, src, force, volatile, stamps):
+    """The same five states for a file that cannot carry a stamp, read from the sidecar.
+
+    The one state with no counterpart above is `FOREIGN` with no record, and it splits in two
+    by evidence rather than by assumption. If the file hashes to what would be written it is
+    this engine's output whoever put it there, so the record is written down and nothing else
+    happens; that is adoption, and it needs no flag because the comparison has already proved
+    what a flag would have asserted. If it does not, the file is somebody's, and it is skipped.
+
+    Comparing hashes rather than bytes is what finally reaches `strip_volatile` on the one
+    artefact it was written for. The column widths Obsidian writes into a `.base` the moment
+    anybody opens it stop counting as a difference, so an apply no longer discards them.
+    """
+    record = stamps.get(path) if stamps is not None else None
+    state = classify_recorded(cur, record, src, volatile)
+    mine = stamp.record_for(new, src, GENERATED_BY, volatile)
+
+    def keep():
+        if stamps is not None and record:
+            stamps.put(path, record)
+
+    def write(verdict=None):
+        if stamps is not None:
+            stamps.put(path, mine)
+        plan.write(path, aid, new, src=src, verdict=verdict)
+
+    if state == 'ABSENT':
+        return write()
+    if state == stamp.CLEAN:
+        # CLEAN without being byte-identical means the volatile keys moved and nothing else.
+        keep()
+        return plan.noop(path, aid)
+    if state == 'FOREIGN' and stamp.body_sha(cur, volatile) == mine[stamp.KEY_BODY]:
+        # Ours, demonstrably. Writing the record down is the whole of the adoption.
+        if stamps is not None:
+            stamps.put(path, mine)
+        return plan.noop(path, aid, verdict='FOREIGN',
+                         reason='not recorded, and identical: adopted')
+    if state == 'FOREIGN' and aid not in force:
+        keep()
+        return plan.skip(path, aid, 'FOREIGN',
+                         'no record of this package writing it, and it differs from what '
+                         'would be written' + TAKE_IT % aid)
+    if state == stamp.HAND_EDITED and aid not in force:
+        keep()
+        return plan.skip(path, aid, stamp.HAND_EDITED,
+                         'hand-edited; not overwritten' + TAKE_IT % aid)
+    return write(state)
 
 
 def _merged(plan, art, src, region_text, order, force, result, first_write,

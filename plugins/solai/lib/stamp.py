@@ -18,6 +18,12 @@ Rewriting a body-sha to silence a mismatch is the worst single action available 
 package: it converts a detected defect into an undetectable one. Nothing here does it,
 and `apply()` refuses unless the caller passes the body it is actually about to write.
 
+Not every generated artefact can carry frontmatter. A `.base` is bare YAML and `START-HERE.md`
+is emitted without a header, and for years that meant both read UNSTAMPED on every run of every
+vault, including one this package wrote seconds earlier. `record_for` and `verdict_recorded`
+answer the same four questions from a record held beside the file, in `_system/os/stamps.json`.
+The verdicts are identical; only the carrier moves.
+
 Hashing normalises line endings and trailing whitespace, because OneDrive, Obsidian and
 Windows all rewrite those without asking, and a stamp that trips on a CRLF is a stamp
 nobody keeps.
@@ -116,6 +122,36 @@ def verdict(text, expected_source_sha, volatile=None):
     if body_sha(st['body'], volatile) != st['body_sha']:
         return HAND_EDITED
     if expected_source_sha is not None and st['source_sha'] != expected_source_sha:
+        return STALE
+    return CLEAN
+
+
+def record_for(body, source_sha_value, generated_by, volatile=None):
+    """The same three values, as a record for a file whose format cannot hold them.
+
+    A `.base` is YAML with no frontmatter and `START-HERE.md` is emitted without one, so for
+    those the stamp lives beside the artefact instead of inside it. Nothing else changes: the
+    values are the ones `apply()` would have written, computed the same way.
+    """
+    return {KEY_BY: generated_by,
+            KEY_SOURCE: source_sha_value,
+            KEY_BODY: body_sha(body, volatile)}
+
+
+def verdict_recorded(text, record, expected_source_sha, volatile=None):
+    """The four verdicts for a file whose stamp lives beside it rather than in it.
+
+    The whole file is the body here: there is no frontmatter to split off. `UNSTAMPED` means
+    no record rather than no frontmatter, and the two are not the same evidence. A file with
+    no stamp inside it could have carried one and does not. A file with no record beside it
+    may simply predate the record, which is why the caller compares it against what it would
+    write before concluding anything about who wrote it.
+    """
+    if not record or not record.get(KEY_BODY):
+        return UNSTAMPED
+    if body_sha(text, volatile) != record.get(KEY_BODY):
+        return HAND_EDITED
+    if expected_source_sha is not None and record.get(KEY_SOURCE) != expected_source_sha:
         return STALE
     return CLEAN
 

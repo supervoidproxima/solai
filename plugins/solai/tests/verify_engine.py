@@ -149,11 +149,14 @@ required = true
 # three of the four archetypes failed on the one gate they are built to raise.
 FRESH_GATES = {'AV-3'}
 
+# The NOOP count rose by exactly one per archetype in 0.32.0: `_system/os/stamps.json`, the
+# record for the artefacts whose own format carries no stamp. It is planned like any other
+# write, so a second run reports it NOOP like any other.
 CASES = (
-    ('minimal', 'en', 8, 0, 0),
-    ('project', 'en', 49, 5, 3),
-    ('personal', 'ru', 37, 2, 0),
-    ('role', 'en', 41, 5, 2),
+    ('minimal', 'en', 9, 0, 0),
+    ('project', 'en', 50, 5, 3),
+    ('personal', 'ru', 38, 2, 0),
+    ('role', 'en', 42, 5, 2),
 )
 
 ANSWERS = ('remit=A throwaway place built only to verify the engine.',

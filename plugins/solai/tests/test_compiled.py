@@ -51,14 +51,23 @@ on the merge passed on that coincidence, and so did the one real vault available
 `subjects/`, which no archetype declares, and the merge kept the class and then refused the set
 it had just built. A fixture that shares an accidental property with the only live example
 confirms whatever that property permits.
+
+`CP-37` to `CP-42` are the branch for an artefact whose FORMAT can hold no stamp at all, which
+is a different thing from a vault that has not been stamped yet. `registry.base` is bare YAML
+and `START-HERE.md` has no frontmatter, so both read UNSTAMPED on every run of every vault and
+the branch documented as a skip wrote over them anyway. The stamp moved beside the file, and the
+state with no record splits by evidence rather than by assumption: identical to what would be
+written is proof of authorship, and different is proof of nothing.
 """
+import io
 import os
 import shutil
 import tempfile
 
-from lib import decl, engine, regions, stamp
+from lib import decl, engine, fsplan, regions, stamp
+from lib.emit import bases
 
-EXPECTED = 36
+EXPECTED = 43
 NAME = 'compiled'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -497,5 +506,101 @@ def group_shared(s):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+
+
+# --------------------------------------------------------- an artefact with nowhere to stamp
+
+BASE_BODY = 'properties:\n  note.text:\n    displayName: description\nviews:\n'
+
+
+def _one(tmp, name, body=None):
+    """A vault root holding one unstampable artefact, or none at all."""
+    root = os.path.join(tmp, name)
+    os.makedirs(root)
+    if body is not None:
+        with io.open(os.path.join(root, 'registry.base'), 'w',
+                     encoding='utf-8', newline='\n') as fh:
+            fh.write(body)
+    return root
+
+
+def _plan_base(root, body=BASE_BODY, src='aaaaaaaaaaaaaaaa', force=(), stamps=None):
+    plan = fsplan.Plan(root, '0.32.0')
+    st = stamps if stamps is not None else engine.Stamps()
+    engine._generated(plan, 'registry.base', 'registry-base', body, src, force,
+                      volatile=bases.VOLATILE, fmeta=None, stamps=st)
+    return plan.actions[0], st
+
+
+def group_unstamped(s):
+    """CP-37 to CP-42: the branch that used to write over anything it had not stamped.
+
+    A `.base` carries no frontmatter and `START-HERE.md` carries none either, so both read
+    UNSTAMPED on every run of every vault, including one written seconds before. The branch
+    documented as `FOREIGN skip` fell through to `write`, and two Counselor applies replaced
+    a hand-built base of nine views with the archetype's four. The stamps now live beside the
+    artefact, and the state with no record splits by evidence: identical is proof it is ours,
+    different is proof of nothing and is left alone.
+    """
+    tmp = tempfile.mkdtemp(prefix='solai-unstamped-')
+    try:
+        act, st = _plan_base(_one(tmp, 'absent', None))
+        s.ok('CP-37', 'an absent unstampable artefact is written, and its stamp recorded',
+             act.kind == fsplan.WRITE and 'registry.base' in st.next
+             and st.next['registry.base'][stamp.KEY_BODY]
+             == stamp.body_sha(stamp.normalise(BASE_BODY), bases.VOLATILE),
+             repr((act.kind, st.next)))
+
+        act, st = _plan_base(_one(tmp, 'identical', BASE_BODY))
+        s.ok('CP-38', 'no record and byte-identical is adopted: NOOP, and the record written '
+                      'down. The comparison has already proved what a flag would assert',
+             act.kind == fsplan.NOOP and act.verdict == 'FOREIGN'
+             and 'registry.base' in st.next, repr((act.kind, act.verdict, st.next)))
+
+        act, st = _plan_base(_one(tmp, 'theirs', BASE_BODY + '  - type: table\n    name: nine\n'))
+        s.ok('CP-39', 'no record and different is FOREIGN: skipped, not written, and not '
+                      'claimed in the record either',
+             act.kind == fsplan.SKIP and act.verdict == 'FOREIGN'
+             and '--force registry-base' in act.reason and st.next == {},
+             repr((act.kind, act.verdict, act.reason, st.next)))
+
+        # The same file, now recorded, and then edited by somebody.
+        rec = {'registry.base': stamp.record_for(stamp.normalise(BASE_BODY), 'aaaaaaaaaaaaaaaa',
+                                                 'solai@0.32.0', bases.VOLATILE)}
+        root = _one(tmp, 'edited', BASE_BODY + '  - type: table\n    name: mine\n')
+        act, st = _plan_base(root, stamps=engine.Stamps(rec))
+        s.ok('CP-40', 'a recorded artefact edited afterwards is HAND-EDITED, skipped, and its '
+                      'old record kept: a file refused is a file not claimed',
+             act.kind == fsplan.SKIP and act.verdict == stamp.HAND_EDITED
+             and st.next == rec, repr((act.kind, act.verdict, st.next)))
+
+        act, st = _plan_base(root, force=('registry-base',), stamps=engine.Stamps(rec))
+        # The record must describe the bytes this action commits to write, never the bytes
+        # that happened to be on disk. Rewriting a body-sha to silence a mismatch is the worst
+        # single thing available here, and this is the assertion that would catch it.
+        s.ok('CP-40b', '--force takes it, and the record describes what was actually written',
+             act.kind == fsplan.WRITE
+             and st.next['registry.base'][stamp.KEY_BODY]
+             == stamp.body_sha(act.content, bases.VOLATILE),
+             repr((act.kind, st.next)))
+
+        act, st = _plan_base(_one(tmp, 'stale', BASE_BODY), src='bbbbbbbbbbbbbbbb',
+                             stamps=engine.Stamps(rec))
+        s.ok('CP-41', 'an intact recorded artefact whose source moved is STALE and regenerates',
+             act.kind == fsplan.WRITE and act.verdict == stamp.STALE,
+             repr((act.kind, act.verdict)))
+
+        # The reason `strip_volatile` was written, finally reached. Before this the comparison
+        # was byte-for-byte, so an apply discarded the column widths Obsidian itself wrote.
+        opened = BASE_BODY + '    columnSize:\n      note.id: 260\n'
+        act, st = _plan_base(_one(tmp, 'opened', opened), stamps=engine.Stamps(rec))
+        s.ok('CP-42', 'a recorded base carrying the columnSize Obsidian wrote is NOOP, so an '
+                      'apply no longer discards column widths',
+             act.kind == fsplan.NOOP and st.next == rec,
+             repr((act.kind, act.verdict, act.reason)))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 GROUPS = (group_compiled, group_merge, group_predates, group_folders,
-          group_shared)
+          group_shared, group_unstamped)

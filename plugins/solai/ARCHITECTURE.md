@@ -4,7 +4,7 @@ What solai is made of, layer by layer, and where the boundary of each one runs.
 
 `README.md` says what the package does and `doctrine.md` says why. This file says how it is
 put together, and it is the file to read before changing `lib/`. It describes what exists on
-2026-09-12 at version 0.31.0. Where something is absent, it is named as absent: D13 holds
+2026-09-13 at version 0.32.0. Where something is absent, it is named as absent: D13 holds
 here as everywhere, and an architecture diagram that draws a box nobody built is the exact
 defect D1 forbids.
 
@@ -36,7 +36,7 @@ Read top to bottom as a single `--apply` travels it.
 |---|---|---|---|---|
 | 1 | Interview | the questions an archetype declares, asked once, stored as answers | `skills/solai/interview.md`, `_system/os/answers.toml` | `EVALS.md` E1-E3 |
 | 2 | Declaration | TOML: classes, lookups, agents, workflows, the manifest | `archetypes/*/`, `common/` | `lib/decl.py`, fails fast with every reason at once |
-| 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 366 assertions |
+| 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 378 assertions |
 | 4 | Plan and write | four write modes, region merge, rollback manifest | `lib/fsplan.py`, `lib/regions.py`, `lib/stamp.py` | `--plan` default; applying twice is provably a no-op |
 | 5 | Storage | the vault: Markdown plus YAML, and its compiled declarations | the vault, `_system/os/` | `runtime/validate_cards.py`, `check_links.py` |
 | 6 | Knowledge | a built `kb/`: one record per citable unit, SQLite FTS, a manifest | `skills/solai-kb/` | four build refusals; `tests/test_kb.py`, 25 assertions; the `answerable` scenario |
@@ -91,6 +91,15 @@ and HAND-EDITED otherwise.
 distinction looks pedantic and was a real defect: under a merge the two differ, and hashing
 the wrong one made every region in the vault read STALE on the next ordinary run.
 
+**Two artefacts can hold no stamp at all.** `registry.base` is bare YAML and `START-HERE.md`
+carries no frontmatter, so both read UNSTAMPED on every run of every vault, including one this
+engine wrote seconds earlier, and the branch documented as a skip wrote over them anyway. Their
+stamps live in `_system/os/stamps.json`, one record per path, and the state with no record
+splits by evidence rather than by assumption: a file that hashes to what would be written is
+ours and the record is simply written down, and a file that does not is skipped and reported,
+with `--force <id>` as the way back. Hashing goes through `strip_volatile`, which is how an
+apply stopped discarding the column widths Obsidian writes into a `.base`.
+
 ## 5. Storage
 
 Plain Markdown with YAML frontmatter, in a folder the user already opens in Obsidian. No
@@ -98,8 +107,8 @@ database, and the absence is the design: state lives in a field a generator read
 field in a text file is greppable, diffable, versionable and readable without this package
 installed. A vault outlives the tool that built it.
 
-`_system/os/` holds the compiled declarations, the answers, the apply manifest and the build
-ledger. It is explicitly out of scope of the vault's own governance, because a vault auditing
+`_system/os/` holds the compiled declarations, the answers, the apply manifest, the stamps of
+the artefacts whose own format carries none, and the build ledger. It is explicitly out of scope of the vault's own governance, because a vault auditing
 its own engine state is a category error.
 
 ## 6. Knowledge
@@ -151,7 +160,7 @@ Four mechanisms, and only the first is advisory:
 
 | Gate | Proves |
 |---|---|
-| `tests/run_tests.py` | 366 assertions over the primitives, loaders and emitters |
+| `tests/run_tests.py` | 378 assertions over the primitives, loaders and emitters |
 | `tests/verify_engine.py` | four archetypes built, applied twice, checked and probed, plus `evolved` and `upgraded` |
 | `tests/verify_install.py` | the installer's branches on a machine that has nothing |
 

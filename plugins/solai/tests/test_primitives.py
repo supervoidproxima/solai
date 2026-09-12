@@ -13,7 +13,7 @@ carry a guarantee that is invisible when it breaks:
   - `regions` must find a MALFORMED marker, not only a well-formed one. A regex that matches
     only correct stamps makes a broken one invisible, which is worse than either alternative.
 
-Counts: fm 14, stamp 11, regions 13, fsplan 7 (split across two groups, so a crash in
+Counts: fm 14, stamp 16, regions 13, fsplan 7 (split across two groups, so a crash in
 `apply` does not cost the plan-level assertions).
 """
 import io
@@ -24,7 +24,7 @@ import tempfile
 
 from lib import fm, fsplan, regions, stamp
 
-EXPECTED = 62
+EXPECTED = 67
 NAME = 'primitives'
 
 VERSION = '0.4.0'
@@ -158,6 +158,29 @@ def group_stamp(s):
                                  'Some generated body.\ncolumnSize:\n  note.id: 260')
     s.eq('ST-11', 'a columnSize block injected by Obsidian still reads CLEAN',
          stamp.verdict(polluted, src, vol), stamp.CLEAN)
+
+    # ST-12 to ST-16: the same four verdicts for a file whose format carries no stamp, read
+    # from a record beside it. A `.base` is bare YAML and `START-HERE.md` has no frontmatter,
+    # so before this both read UNSTAMPED on every run of every vault and were overwritten.
+    plain = 'properties:\n  note.text:\n    displayName: description\n'
+    rec = stamp.record_for(plain, src, 'place %s' % VERSION)
+
+    s.eq('ST-12', 'no record at all reads UNSTAMPED: silence is not a claim either way',
+         stamp.verdict_recorded(plain, None, src), stamp.UNSTAMPED)
+
+    s.eq('ST-13', 'the recorded stamp of a file reads CLEAN against the file it was taken from',
+         stamp.verdict_recorded(plain, rec, src), stamp.CLEAN)
+
+    s.eq('ST-14', 'a recorded file edited afterwards reads HAND-EDITED, never STALE',
+         stamp.verdict_recorded(plain + 'a human wrote this\n', rec, src), stamp.HAND_EDITED)
+
+    s.eq('ST-15', 'an intact recorded file whose source moved reads STALE',
+         stamp.verdict_recorded(plain, rec, 'deadbeefdeadbeef'), stamp.STALE)
+
+    vrec = stamp.record_for(plain, src, 'place %s' % VERSION, vol)
+    s.eq('ST-16', 'a recorded .base carrying the columnSize Obsidian wrote still reads CLEAN',
+         stamp.verdict_recorded(plain + 'columnSize:\n  note.id: 260\n', vrec, src, vol),
+         stamp.CLEAN)
 
 
 # --------------------------------------------------------------------------- regions
