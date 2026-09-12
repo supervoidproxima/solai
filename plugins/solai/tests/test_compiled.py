@@ -39,6 +39,11 @@ CP-28 passed before the fix as well, and is here for that reason rather than in 
 it holds the case the fix must NOT change. Reverting the loader turns CP-26, CP-27 and CP-29
 red and leaves CP-28 green, which is the shape a preservation assertion is supposed to have.
 
+`CP-33` to `CP-36` are the other half of the merge: a class BOTH sides declare. The rule was
+"the package wins", whole, and it cost a live vault the `filename = "slug"` it had decided on and
+recorded, which turned nineteen cards invalid in the same second the upgrade landed. The package
+is entitled to the engine's shape and not to what a vault's cards are called and shown by.
+
 `CP-30` to `CP-32` are the folder a kept class lives in, and they exist because `zeta` above
 sits at `registry/zeta`, under a folder `project` declares for its own reasons. Every assertion
 on the merge passed on that coincidence, and so did the one real vault available, whose
@@ -53,7 +58,7 @@ import tempfile
 
 from lib import decl, engine, regions, stamp
 
-EXPECTED = 32
+EXPECTED = 36
 NAME = 'compiled'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -429,4 +434,68 @@ def group_folders(s):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-GROUPS = (group_compiled, group_merge, group_predates, group_folders)
+
+def group_shared(s):
+    """A class BOTH sides declare: which half of it the package is entitled to."""
+    tmp = tempfile.mkdtemp(prefix='solai-test-sh-')
+    try:
+        proj = decl._read_text(PROJ)
+        gap = decl._read_text(os.path.join(PKG_ROOT, 'archetypes', 'project',
+                                           'classes', 'gap.toml'))
+        # The counselor's shape: the package's own class, with the one key that decides what
+        # its cards are CALLED changed, and a reason written above it. Losing this key made
+        # nineteen cards invalid the moment an upgrade landed.
+        # Both keys, because they travel together and the validator knows it: a slug
+        # filename with no `id` column leaves the one view built for finding a card
+        # unable to show its identifier. That pairing is why a vault editing one key
+        # usually edits two, and why the residue in RES-009 is worth naming.
+        mine = gap.replace('schema = 1',
+                           'schema = 1\n\n# The filename is the slug: the graph view shows '
+                           'filenames.\nfilename = "slug"', 1)
+        mine = mine.replace('columns = ["file.name",', 'columns = ["file.name", "id",', 1)
+        root = _vault(tmp, manifest=decl._relist(proj, 'classes', ['gap']),
+                      classes={'gap': mine})
+        arch, notes = decl.load_merged(PKG_ROOT, root, 'project')
+        got = [c for c in arch.classes if c.name == 'gap'][0]
+
+        s.ok('CP-33', 'a class differing only in what the vault owns resolves to the VAULT',
+             os.path.abspath(got.path).startswith(os.path.abspath(root))
+             and got.filename == 'slug',
+             'an upgrade may not un-decide what a vault decided and wrote down. Got %s'
+             % got.path)
+
+        s.ok('CP-34', 'the note names the keys and says the vault keeps it',
+             any("'gap'" in n and 'filename' in n and 'kept' in n for n in notes),
+             repr(notes))
+
+        # The same class, differing in a key the package owns as well. The package wins, and
+        # what the vault loses is named rather than discovered later.
+        both = mine.replace('prefix    = "GAP"', 'prefix    = "GAX"', 1)
+        root = _vault(tmp, manifest=decl._relist(proj, 'classes', ['gap']),
+                      classes={'gap': both})
+        arch2, notes2 = decl.load_merged(PKG_ROOT, root, 'project')
+        got2 = [c for c in arch2.classes if c.name == 'gap'][0]
+        s.ok('CP-35', 'a class differing where the package owns goes to the PACKAGE, and the '
+                      'note names both sets',
+             os.path.abspath(got2.path).startswith(
+                 os.path.abspath(os.path.join(PKG_ROOT, 'archetypes')))
+             and any("'gap'" in n and 'prefix' in n and 'filename' in n for n in notes2),
+             repr((got2.path, notes2)))
+
+        # Agents have no vault-owned list, and nothing has needed one. The older rule stands,
+        # stated here so its absence is a decision rather than an oversight.
+        agent = decl._read_text(os.path.join(PKG_ROOT, 'common', 'agents', 'scout.toml'))
+        root = _vault(tmp, manifest=decl._relist(decl._relist(proj, 'classes', []),
+                                                 'agents', ['scout']),
+                      classes={}, agents={'scout': agent + '\n# edited by the vault\n'})
+        arch3, notes3 = decl.load_merged(PKG_ROOT, root, 'project')
+        s.ok('CP-36', 'an agent declared by both still goes to the package, whole',
+             os.path.abspath(arch3.agent('scout').path).startswith(
+                 os.path.abspath(os.path.join(PKG_ROOT, 'common')))
+             and any("'scout'" in n and 'overwritten' in n for n in notes3),
+             repr(notes3))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+GROUPS = (group_compiled, group_merge, group_predates, group_folders,
+          group_shared)

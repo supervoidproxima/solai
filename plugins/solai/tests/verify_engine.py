@@ -76,8 +76,9 @@ unexercised, and are stated as such rather than implied.
 Four scenarios run after the four archetypes and none touches the counts above, because
 each mutates a vault that has already been built and measured. `evolved` retires a class from
 a `role` vault and re-applies. `upgraded` is its mirror: a `project` vault declares a class, an
-agent and a workflow that the package does not carry and then takes a package upgrade, which
-must keep all three. Those two directions are the whole contract between a vault and the
+agent and a workflow that the package does not carry, and edits a class the package DOES
+carry in the two keys a vault owns, and then takes a package upgrade, which must keep all
+four. Those two directions are the whole contract between a vault and the
 package it was built from.
 
 `predates` is the third. `upgraded` passes only because the vault it builds always carries a
@@ -421,6 +422,17 @@ def main():
         if os.path.isdir(root):
             io.open(os.path.join(root, '_system', 'os', 'classes', 'zeta.toml'), 'w',
                     encoding='utf-8', newline='\n').write(ZETA)
+            # A class the package ALSO declares, edited in the two keys a vault owns.
+            # The rule used to be that the package won whole, and that cost one live
+            # vault a `filename = "slug"` it had decided on and recorded: nineteen
+            # cards were invalid the second the upgrade landed. GAP-009, RES-009.
+            shared = io.open(os.path.join(PKG, 'archetypes', 'project', 'classes',
+                                          'gap.toml'), encoding='utf-8').read()
+            shared = shared.replace('schema = 1', 'schema = 1\n\nfilename = "slug"', 1)
+            shared = shared.replace('columns = ["file.name",',
+                                    'columns = ["file.name", "id",', 1)
+            io.open(os.path.join(root, '_system', 'os', 'classes', 'gap.toml'), 'w',
+                    encoding='utf-8', newline='\n').write(shared)
             # An agent and a workflow of the vault's own, renamed from what the package
             # ships. A vault declares one the same way it declares a class - by putting the
             # file in `_system/os/` - so an upgrade has the same duty towards all three.
@@ -470,6 +482,17 @@ def main():
             if not os.path.isdir(os.path.join(root, 'zetas')):
                 failures.append('upgraded: the folder of the kept class was never created, '
                                 'so the vault declares a folder that is not there')
+                ok = False
+            shared_now = io.open(os.path.join(root, '_system', 'os', 'classes',
+                                              'gap.toml'), encoding='utf-8').read()
+            if 'filename = "slug"' not in shared_now:
+                failures.append('upgraded: the upgrade un-decided what this vault decided '
+                                'about a class the package also declares. It differed only '
+                                'in what the vault owns, and the package took it anyway')
+                ok = False
+            if 'kept' not in out or "'gap'" not in out:
+                failures.append('upgraded: keeping the vault half of a shared class was not '
+                                'reported, so a reader cannot tell it happened')
                 ok = False
             for kept in (('_system', 'os', 'agents', 'probe.toml'),
                          ('_system', 'os', 'workflows', 'probe-job.toml'),

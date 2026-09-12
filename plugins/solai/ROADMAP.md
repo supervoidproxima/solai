@@ -66,6 +66,7 @@ Newest first. The CHANGELOG row is the full account; this is the index.
 
 | Version | What | Row |
 |---|---|---|
+| 0.31.0 | the package wins on the engine's shape; the vault keeps what its cards are called and shown by | 64 |
 | 0.30.0 | a kept class carries the folder it lives in | 63 |
 | 0.29.0 | the knowledge layer gets a surface, and an upgrade stops believing a manifest it may predate | 59-62 |
 | 0.28.0 | the upgrade merge covers lookups, agents and workflows | 58 |

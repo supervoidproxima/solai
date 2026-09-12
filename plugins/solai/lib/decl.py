@@ -918,6 +918,29 @@ def _relist(body, key, names):
     return '\n'.join(out)
 
 
+# The keys a VAULT owns in a class both it and the package declare. What a card is called on
+# disk, what its view shows, and what the class is for in this vault's words. Everything absent
+# from this list is the engine's shape - fields, status, links, body, folder, prefix, skill -
+# and belongs to the package, which is what an upgrade is for.
+#
+# The list is closed and short on purpose. A key nobody anticipated lands on the package's side,
+# where the failure is loud: the note names it, and a person can put it back.
+VAULT_OWNED = ('filename', 'view', 'purpose', 'title')
+
+
+def _differing(mine, theirs):
+    """(vault-owned keys that differ, package-owned keys that differ), by parsed value.
+
+    Text comparison is what the caller has already done and it is too coarse to act on: two
+    declarations differ by a comment, by a reordering, or by the one key a vault changed for a
+    reason it wrote down above it.
+    """
+    a, b = mine.raw, theirs.raw
+    differ = [k for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)]
+    return ([k for k in differ if k in VAULT_OWNED],
+            [k for k in differ if k not in VAULT_OWNED])
+
+
 def _covered(folder, declared):
     """Is `folder` the same as, or inside, one of `declared`?
 
@@ -968,10 +991,19 @@ def load_merged(pkg_root, vault_root, name):
 
       package only  -> taken. This is what upgrading means.
       vault only    -> KEPT. Nobody asked for it to go, and the vault is using it.
-      both          -> the PACKAGE wins, and the note says so by name, because an upgrade
-                       whose declarations lose to the copy already on disk upgrades nothing.
-                       A vault that wants to keep its own version of a declaration the package
-                       has since adopted renames it first; that is what `class rename` is for.
+      both          -> the PACKAGE wins on the ENGINE'S SHAPE, because an upgrade whose
+                       declarations lose to the copy already on disk upgrades nothing. It does
+                       not win on what the vault's cards are CALLED and SHOWN by: `VAULT_OWNED`
+                       is the closed list, and a class differing only there is kept as the
+                       vault wrote it, comments and all. A class differing anywhere else goes
+                       to the package and the note names both sets, so the reader sees why the
+                       package won and what of theirs is being replaced.
+
+                       That rule cost one vault its `filename = "slug"`, a decision it had
+                       taken and recorded, and nineteen cards became invalid the moment the
+                       upgrade landed. The escape offered until then was to rename the class
+                       first, which is no escape for a class the content is built on: renaming
+                       `duty` orphans every citation, view and filename that names it.
 
     ALL FOUR KINDS, not just classes. The first release of this loader guarded classes and
     named agents and workflows as uncovered, on the reasoning that no vault declared one of
@@ -1020,8 +1052,21 @@ def load_merged(pkg_root, vault_root, name):
              'agents': list(pkg.agent_names), 'workflows': list(pkg.workflow_names)}
     widened = set()
 
-    def consider(kind, mine, theirs, take):
-        """`mine` from the vault, `theirs` the package declarations of the same kind."""
+    def swap(existing, replacement):
+        """Put the vault's declaration where the package's was, keeping the order."""
+        for seq in (pkg.classes, pkg.lookups):
+            for i, x in enumerate(seq):
+                if x is existing:
+                    seq[i] = replacement
+                    return True
+        return False
+
+    def consider(kind, mine, theirs, take, owned=False):
+        """`mine` from the vault, `theirs` the package declarations of the same kind.
+
+        `owned` says the kind has a vault-owned key list. Classes have one; agents and
+        workflows do not, and nothing has needed one, so they keep the older rule whole.
+        """
         have = dict((d.name, d) for d in theirs)
         for d in mine:
             if d.name in have:
@@ -1029,9 +1074,27 @@ def load_merged(pkg_root, vault_root, name):
                 # an unchanged set buries the one row that matters, and "is overwritten" is
                 # not true of a byte-identical file: the engine plans that row as a NOOP.
                 if _read_text(d.path) != _read_text(have[d.name].path):
-                    notes.append('%s: %r is declared by both and the two differ. The package '
-                                 "declaration wins; this vault's copy is overwritten."
-                                 % (kind, d.name))
+                    ours, theirs_keys = _differing(d, have[d.name]) if owned else ([], ['*'])
+                    if ours and not theirs_keys:
+                        # Differs only where the package has no opinion. The vault's file is
+                        # kept WHOLE rather than merged key by key, because these files carry
+                        # their reasons in comments above the keys and no writer in the
+                        # standard library preserves a comment. A merge that dropped the
+                        # sentence explaining a key would be a worse version of this defect.
+                        swap(have[d.name], d)
+                        notes.append('%s: %r is declared by both and differs only in %s, which '
+                                     "this vault owns. This vault's declaration is kept."
+                                     % (kind, d.name, ', '.join(ours)))
+                    elif ours:
+                        notes.append('%s: %r is declared by both. The package declaration wins, '
+                                     'because %s differ there too. This vault\'s %s is '
+                                     'replaced: re-apply by hand if it was deliberate.'
+                                     % (kind, d.name, ', '.join(theirs_keys),
+                                        ', '.join(ours)))
+                    else:
+                        notes.append('%s: %r is declared by both and the two differ. The '
+                                     "package declaration wins; this vault's copy is "
+                                     'overwritten.' % (kind, d.name))
                 continue
             listed = take(d)
             lists[listed].append(d.name)
@@ -1053,7 +1116,8 @@ def load_merged(pkg_root, vault_root, name):
         pkg.classes.append(d)
         return 'classes'
 
-    consider('classes', local.classes + local.lookups, pkg.classes + pkg.lookups, take_card)
+    consider('classes', local.classes + local.lookups, pkg.classes + pkg.lookups,
+             take_card, owned=True)
     consider('agents', local.agents, pkg.agents,
              lambda d: (pkg.agents.append(d), 'agents')[1])
     consider('workflows', local.workflows, pkg.workflows,
