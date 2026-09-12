@@ -4,7 +4,7 @@ What solai is made of, layer by layer, and where the boundary of each one runs.
 
 `README.md` says what the package does and `doctrine.md` says why. This file says how it is
 put together, and it is the file to read before changing `lib/`. It describes what exists on
-2026-09-13 at version 0.33.0. Where something is absent, it is named as absent: D13 holds
+2026-09-13 at version 0.34.0. Where something is absent, it is named as absent: D13 holds
 here as everywhere, and an architecture diagram that draws a box nobody built is the exact
 defect D1 forbids.
 
@@ -36,7 +36,7 @@ Read top to bottom as a single `--apply` travels it.
 |---|---|---|---|---|
 | 1 | Interview | the questions an archetype declares, asked once, stored as answers | `skills/solai/interview.md`, `_system/os/answers.toml` | `EVALS.md` E1-E3 |
 | 2 | Declaration | TOML: classes, lookups, agents, workflows, the manifest | `archetypes/*/`, `common/` | `lib/decl.py`, fails fast with every reason at once |
-| 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 392 assertions |
+| 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 398 assertions |
 | 4 | Plan and write | four write modes, region merge, rollback manifest | `lib/fsplan.py`, `lib/regions.py`, `lib/stamp.py` | `--plan` default; applying twice is provably a no-op |
 | 5 | Storage | the vault: Markdown plus YAML, and its compiled declarations | the vault, `_system/os/` | `runtime/validate_cards.py`, `check_links.py` |
 | 6 | Knowledge | a built `kb/`: one record per citable unit, SQLite FTS, a manifest | `skills/solai-kb/` | four build refusals; `tests/test_kb.py`, 25 assertions; the `answerable` scenario |
@@ -79,7 +79,7 @@ is built in full, printed as a table, and only then applied. Every row carries a
 | `generated` | the engine | rewritten |
 | `seeded` | you, after the first write | never touched again |
 | `merged` | you, except marker-delimited regions | per region, so one edited paragraph costs one region |
-| `copied` | the package, tracked by hash | replaced when the source moves |
+| `copied` | the package, tracked by a record beside it | replaced when the source moves, skipped when you edited it |
 
 A generated region carries `source-sha` and `body-sha`. The check distinguishes STALE, where a
 source moved, from HAND-EDITED, where the body no longer matches its stamp, and a hand edit
@@ -110,6 +110,11 @@ installed. A vault outlives the tool that built it.
 `_system/os/` holds the compiled declarations, the answers, the apply manifest, the stamps of
 the artefacts whose own format carries none, and the build ledger. It is explicitly out of scope of the vault's own governance, because a vault auditing
 its own engine state is a category error.
+
+A copied file keeps its record in the same `stamps.json`, because it cannot carry a stamp either:
+it is somebody else's code and a stamp inside it would be an edit to it. That record is what lets
+the engine tell "the package moved this" from "you edited this", which it could not do at all
+until 0.34.0, and could therefore never deliver a fix to a shipped script.
 
 `_system/scripts/` holds the checks and generators, copied rather than generated, and they share
 one argument reader, `_args.py`. The rule it enforces is narrow and is the one that can be kept:
@@ -167,7 +172,7 @@ Four mechanisms, and only the first is advisory:
 
 | Gate | Proves |
 |---|---|
-| `tests/run_tests.py` | 392 assertions over the primitives, loaders and emitters |
+| `tests/run_tests.py` | 398 assertions over the primitives, loaders and emitters |
 | `tests/verify_engine.py` | four archetypes built, applied twice, checked and probed, plus `evolved` and `upgraded` |
 | `tests/verify_install.py` | the installer's branches on a machine that has nothing |
 

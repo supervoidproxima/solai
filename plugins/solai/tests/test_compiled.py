@@ -58,6 +58,12 @@ and `START-HERE.md` has no frontmatter, so both read UNSTAMPED on every run of e
 the branch documented as a skip wrote over them anyway. The stamp moved beside the file, and the
 state with no record splits by evidence rather than by assumption: identical to what would be
 written is proof of authorship, and different is proof of nothing.
+
+`CP-43` to `CP-48` are the same argument for a file the package OWNS and the vault RUNS. That
+branch had three fates and needed six, and the missing one was the ordinary one: the package
+changed the file. Without a record of what was last copied in, "I changed this" and "you edited
+this" are one observation, and it was resolved towards never writing. `CP-46` is the fate that did
+not exist, and it is the reason a fix to a shipped script can be delivered at all.
 """
 import io
 import os
@@ -67,7 +73,7 @@ import tempfile
 from lib import decl, engine, fsplan, regions, stamp
 from lib.emit import bases
 
-EXPECTED = 43
+EXPECTED = 49
 NAME = 'compiled'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -602,5 +608,91 @@ def group_unstamped(s):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+
+
+# ------------------------------------------------------- a file the package owns and we run
+
+SHIPPED = '# a shipped script\nprint("one")\n'
+MOVED = '# a shipped script\nprint("two")\n'
+
+
+def _copied_case(tmp, name, here=None, shipped=SHIPPED, record=None, force=()):
+    """-> (action, stamps). A vault holding one copied file, or none, and a package source."""
+    root = os.path.join(tmp, name)
+    os.makedirs(os.path.join(root, 'vault', '_system', 'scripts'))
+    src = os.path.join(root, 'src.py')
+    with io.open(src, 'w', encoding='utf-8', newline='\n') as fh:
+        fh.write(shipped)
+    target = '_system/scripts/thing.py'
+    if here is not None:
+        with io.open(os.path.join(root, 'vault', '_system', 'scripts', 'thing.py'), 'w',
+                     encoding='utf-8', newline='\n') as fh:
+            fh.write(here)
+    plan = fsplan.Plan(os.path.join(root, 'vault'), '0.34.0')
+    st = engine.Stamps({target: record} if record else None)
+    act = engine._copied(plan, target, 'scripts', src, force, st)
+    return act, st, target
+
+
+def _rec(text):
+    return {stamp.KEY_BODY: stamp.sha(text), stamp.KEY_BY: 'solai@0.33.0'}
+
+
+def group_copied(s):
+    """CP-43 to CP-48: what happens to a file the package ships and the vault runs.
+
+    The branch had three fates and needed six. It hashed the shipped source against the file
+    and called every difference `LOCAL`, which is right for a file the vault edited and wrong
+    for the ordinary case, the package changing it. With no record of what was last put there
+    those two are one observation, and resolving them towards never writing made every fix to
+    a shipped script undeliverable to every vault that already existed: nine files in the
+    Solai vault were reported `LOCAL` on the day `RES-011` shipped, and not one was edited.
+    """
+    tmp = tempfile.mkdtemp(prefix='solai-copied-')
+    try:
+        act, st, target = _copied_case(tmp, 'absent')
+        s.ok('CP-43', 'an absent copied file is copied in, and the bytes recorded',
+             act.kind == fsplan.COPY
+             and st.next.get(target, {}).get(stamp.KEY_BODY) == stamp.sha(SHIPPED),
+             repr((act.kind, st.next)))
+
+        act, st, target = _copied_case(tmp, 'same', here=SHIPPED)
+        s.ok('CP-44', 'no record and identical to what is shipped is adopted: NOOP, recorded',
+             act.kind == fsplan.NOOP and act.verdict == 'FOREIGN'
+             and target in st.next, repr((act.kind, act.verdict, st.next)))
+
+        act, st, target = _copied_case(tmp, 'unknown', here='# somebody else entirely\n')
+        s.ok('CP-45', 'no record and different is FOREIGN: skipped, and not claimed',
+             act.kind == fsplan.SKIP and act.verdict == 'FOREIGN' and st.next == {},
+             repr((act.kind, act.verdict, st.next)))
+
+        # The fate that did not exist. This is the whole of GAP-012.
+        act, st, target = _copied_case(tmp, 'moved', here=SHIPPED, shipped=MOVED,
+                                       record=_rec(SHIPPED))
+        s.ok('CP-46', 'a recorded file nobody edited, whose source moved, is UPDATED rather '
+                      'than reported as the vault\'s own',
+             act.kind == fsplan.COPY and act.verdict == 'UPDATED'
+             and st.next.get(target, {}).get(stamp.KEY_BODY) == stamp.sha(MOVED),
+             repr((act.kind, act.verdict, st.next)))
+
+        act, st, target = _copied_case(tmp, 'edited', here=SHIPPED + '# mine\n',
+                                       shipped=MOVED, record=_rec(SHIPPED))
+        s.ok('CP-47', 'a recorded file edited here is LOCAL, skipped, and keeps its old record',
+             act.kind == fsplan.SKIP and act.verdict == 'LOCAL'
+             and st.next[target] == _rec(SHIPPED),
+             repr((act.kind, act.verdict, st.next)))
+
+        # Forcing by artefact id would take all of them; the path is what the plan row prints.
+        act, st, target = _copied_case(tmp, 'forced', here=SHIPPED + '# mine\n', shipped=MOVED,
+                                       record=_rec(SHIPPED), force=('_system/scripts/thing.py',))
+        act2, _st2, _t2 = _copied_case(tmp, 'sibling', here=SHIPPED + '# mine\n', shipped=MOVED,
+                                       record=_rec(SHIPPED), force=('_system/scripts/other.py',))
+        s.ok('CP-48', '--force takes a copied file by its own path, and leaves its siblings',
+             act.kind == fsplan.COPY and act2.kind == fsplan.SKIP,
+             repr((act.kind, act2.kind)))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 GROUPS = (group_compiled, group_merge, group_predates, group_folders,
-          group_shared, group_unstamped)
+          group_shared, group_unstamped, group_copied)

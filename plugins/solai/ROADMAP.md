@@ -46,7 +46,7 @@ card that records whether the date was met.
 | **R-7** | The governed tier's org layer | No vault has reached the tier. Building the enforcement for a tier nobody occupies is machinery |
 | **R-8** | `counsel` as its own skill | Its assertions ship inside `check`, so the guard exists from day one. A separate skill buys a name, not a check |
 | **R-9** | HTML org maps | Downstream of R-7 |
-| **R-10** | Merge artefacts, fragments and runtime on `--from-package` | Those are code rather than declarations. A vault that changed one has a hand edit, and the three region fates already cover a hand edit properly. The line is between what a vault DECLARES and what it RUNS |
+| **R-10** | Merge artefacts, fragments and runtime on `--from-package` | The stated reason was "a vault that changed one has a hand edit", and `GAP-012` falsified it with nine counterexamples in one vault, none of them edited. 0.34.0 took the half that was owed: a copied file records what it was copied from, so the package changing it is a different fact from the vault editing it. The MERGE half stays deferred, and now for a reason that holds: a vault that really has edited a copied script keeps it, and reconciling that with a new version needs a three-way merge against an ancestor no vault carries |
 
 ## Declined
 
@@ -66,6 +66,7 @@ Newest first. The CHANGELOG row is the full account; this is the index.
 
 | Version | What | Row |
 |---|---|---|
+| 0.34.0 | a copied file records what it was copied from, so a fix to a shipped script can reach a vault that already exists | 67 |
 | 0.33.0 | one argument reader for the nine scripts, and a convention sentence corrected to what a generator can promise | 66 |
 | 0.32.0 | an artefact whose format carries no stamp is tracked in a sidecar, so FOREIGN stops meaning overwrite | 65 |
 | 0.31.0 | the package wins on the engine's shape; the vault keeps what its cards are called and shown by | 64 |

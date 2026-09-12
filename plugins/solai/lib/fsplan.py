@@ -102,8 +102,9 @@ class Plan(object):
     def skip(self, rel, artefact, verdict, reason, detail=''):
         return self.add(Action(SKIP, rel, artefact, verdict=verdict, reason=reason, detail=detail))
 
-    def copy(self, rel, artefact, source_path):
-        return self.add(Action(COPY, rel, artefact, content=source_path))
+    def copy(self, rel, artefact, source_path, verdict=None, reason=''):
+        return self.add(Action(COPY, rel, artefact, content=source_path,
+                               verdict=verdict, reason=reason))
 
     def delete(self, rel, artefact, reason=''):
         """Remove a file that exists. The pre-image is captured and backed up by `apply`,

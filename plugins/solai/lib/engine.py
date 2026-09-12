@@ -370,6 +370,7 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
             plan.mkdir(c.folder)
 
     # 2 copied runtime and shared --------------------------------------------
+    unrecorded = []
     for art in arch.artefacts:
         if art.get('mode') != 'copied' or not wanted(art['id']):
             continue
@@ -379,13 +380,22 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
             if not os.path.exists(fsplan.w(source)):
                 result.errors.append('%s: no such file to copy: %s' % (art['id'], source))
                 continue
-            cur = fsplan.read(plan.path(target))
-            if cur is not None and stamp.file_sha(source) == stamp.sha(cur):
-                plan.noop(target, art['id'])
-            elif cur is not None:
-                plan.skip(target, art['id'], 'LOCAL', 'differs from the shipped copy')
-            else:
-                plan.copy(target, art['id'], source)
+            a = _copied(plan, target, art['id'], source, force, stamps)
+            if a is not None and a.kind == fsplan.SKIP and a.verdict == 'FOREIGN':
+                unrecorded.append((art['id'], target))
+
+    # Said once, not nine times. Nine rows each carrying the same paragraph is a paragraph
+    # nobody reads, and this is the one case where every row has the same cause: the vault
+    # predates the record, so the engine cannot tell an old copy from an edit of yours.
+    if unrecorded:
+        ids = sorted(set(a for a, _p in unrecorded))
+        result.deferred.append(
+            '%d copied file(s) have no record of this package putting them there, and differ '
+            'from what it ships now. Each is either an edit of yours or a copy from an older '
+            'release, and nothing here can tell which. They are left alone. Compare one, then '
+            'take them with `--force %s`, or one at a time by its path. Once taken they are '
+            'recorded, and every later release updates them without asking.'
+            % (len(unrecorded), ','.join(ids)))
 
     # 2b materials handed in at setup ----------------------------------------
     # Copied, never opened. Deciding that this document constitutes the role and that one is
@@ -687,6 +697,71 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
 
 TAKE_IT = ('; take it with `--force %s`, which overwrites what is there. '
            'There is no undoing that except `--rollback`')
+
+
+def _forced(aid, path, force):
+    """A copied file may be forced by its artefact id or by its own path.
+
+    By id alone, taking eight scripts would mean losing an edit to the ninth, and the answer
+    to that cannot be "edit nothing". The path is what a person reads in the plan row, so it
+    is what they should be able to type back.
+    """
+    return aid in force or path in force
+
+
+def _copied(plan, target, aid, source, force, stamps):
+    """A file the package owns and the vault runs. Six fates, and one of them was missing.
+
+    The branch used to hash the shipped source against the file and call every difference
+    `LOCAL`, which is right for a file the vault edited and wrong for the ordinary case: the
+    package changed it. With no record of what was last copied here, those two are the same
+    observation, and resolving them towards "never write" made every fix to a shipped script
+    undeliverable to every vault that already existed.
+
+    The record beside the file separates them. `LOCAL` now means what the word always said.
+    """
+    cur = fsplan.read(plan.path(target))
+    shipped = stamp.file_sha(source)
+    record = stamps.get(target) if stamps is not None else None
+    mine = {stamp.KEY_BODY: shipped, stamp.KEY_BY: GENERATED_BY}
+
+    def take(verdict=None):
+        if stamps is not None:
+            stamps.put(target, mine)
+        return plan.copy(target, aid, source, verdict=verdict)
+
+    def keep():
+        if stamps is not None and record:
+            stamps.put(target, record)
+
+    if cur is None:
+        return take()
+
+    here = stamp.sha(cur)
+    state = classify_recorded(cur, record, None)
+
+    if state == 'FOREIGN':
+        if here == shipped:
+            # Ours, demonstrably, whoever put it there. Writing the record down is the adoption.
+            if stamps is not None:
+                stamps.put(target, mine)
+            return plan.noop(target, aid, verdict='FOREIGN',
+                             reason='not recorded, and identical: adopted')
+        if not _forced(aid, target, force):
+            return plan.skip(target, aid, 'FOREIGN', 'not recorded, and differs')
+        return take('FOREIGN')
+
+    if state == stamp.HAND_EDITED:
+        if not _forced(aid, target, force):
+            keep()
+            return plan.skip(target, aid, 'LOCAL', 'edited here since we wrote it')
+        return take('LOCAL')
+
+    # Recorded and unedited. The only question left is whether the package moved.
+    if here == shipped:
+        keep()
+        return plan.noop(target, aid)
+    return take('UPDATED')
 
 
 def _generated(plan, path, aid, body, src, force, volatile=None, fmeta=None, fmeta_text=None,
