@@ -18,6 +18,16 @@ import os
 import re
 import sys
 
+# The shared argument reader, beside this file in `_system/scripts/`. Imported by path rather
+# than by package, because these scripts are copied into a vault and run standalone.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _args                                                        # noqa: E402
+
+USAGE = '''\
+usage: gen_dashboard.py [<vault>] [--stdout]
+  write dashboard.html. A generator: it owns that file completely'''
+
+
 SKIP_DIRS = {'.obsidian', '.trash', '.git', 'node_modules', '.claude', '__pycache__'}
 CONTENT_EXT = {'.md', '.base', '.canvas'}
 STAMP = '<!-- solai:generated-by gen_dashboard body=%s -->'
@@ -209,11 +219,13 @@ def _sha(text):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    root = os.path.abspath(args[0]) if args else os.getcwd()
+    root, opts, done = _args.parse(sys.argv[1:], USAGE, flags=('--stdout',), values=())
+    if done:
+        print(done[1])
+        return done[0]
     files, counts = scan(root)
     html = render(root, files, counts, bond(root))
-    if '--stdout' in sys.argv:
+    if opts['--stdout']:
         sys.stdout.reconfigure(encoding='utf-8')
         print(html)
         return 0

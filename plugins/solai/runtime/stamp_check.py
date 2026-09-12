@@ -23,6 +23,16 @@ import os
 import re
 import sys
 
+# The shared argument reader, beside this file in `_system/scripts/`. Imported by path rather
+# than by package, because these scripts are copied into a vault and run standalone.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _args                                                        # noqa: E402
+
+USAGE = '''\
+usage: stamp_check.py [<vault>] [--json]
+  has a generated region been hand-edited'''
+
+
 sys.stdout.reconfigure(encoding='utf-8')
 
 VOLATILE = [r'^\s*columnSize:', r'^\s*viewport:', r'^\s{2,}[A-Za-z0-9_.]+:\s*\d+\s*$']
@@ -152,10 +162,12 @@ def scan(root):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    root = os.path.abspath(args[0]) if args else os.getcwd()
+    root, opts, done = _args.parse(sys.argv[1:], USAGE, flags=('--json',), values=())
+    if done:
+        print(done[1])
+        return done[0]
     findings = scan(root)
-    if '--json' in sys.argv:
+    if opts['--json']:
         print(json.dumps(findings, ensure_ascii=False, indent=2))
     else:
         bad = [f for f in findings if f['state'] != 'CLEAN']

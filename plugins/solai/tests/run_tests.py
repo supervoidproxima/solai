@@ -22,6 +22,7 @@ for p in (PKG, HERE):
 
 from harness import Suite                                           # noqa: E402
 import test_agents                                                  # noqa: E402
+import test_args                                                    # noqa: E402
 import test_authoring                                               # noqa: E402
 import test_change                                                  # noqa: E402
 import test_compiled
@@ -34,7 +35,8 @@ import test_ui                                                      # noqa: E402
 import test_workflows                                               # noqa: E402
 
 MODULES = (test_primitives, test_decl, test_compiled, test_agents, test_workflows,
-           test_authoring, test_ui, test_kb, test_sensitive, test_change, test_release)
+           test_authoring, test_ui, test_kb, test_sensitive, test_change, test_release,
+           test_args)
 
 
 def main():

@@ -23,6 +23,16 @@ import os
 import re
 import sys
 
+# The shared argument reader, beside this file in `_system/scripts/`. Imported by path rather
+# than by package, because these scripts are copied into a vault and run standalone.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _args                                                        # noqa: E402
+
+USAGE = '''\
+usage: measure_cards.py [<folder>] [--json]
+  how long the cards in one folder actually are'''
+
+
 sys.stdout.reconfigure(encoding='utf-8')
 
 H2 = re.compile(r'(?m)^##[ \t]+(.+?)[ \t]*$')
@@ -100,13 +110,15 @@ def measure(folder):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    folder = os.path.abspath(args[0]) if args else os.getcwd()
+    folder, opts, done = _args.parse(sys.argv[1:], USAGE, flags=('--json',))
+    if done:
+        print(done[1])
+        return done[0]
     if not os.path.isdir(folder):
         print('not a folder: %s' % folder)
         return 2
     cards, rows = measure(folder)
-    if '--json' in sys.argv:
+    if opts['--json']:
         print(json.dumps({'folder': folder, 'cards': cards, 'sections': rows},
                          ensure_ascii=False, indent=2))
         return 0

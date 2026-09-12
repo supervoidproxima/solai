@@ -22,6 +22,16 @@ import os
 import re
 import sys
 
+# The shared argument reader, beside this file in `_system/scripts/`. Imported by path rather
+# than by package, because these scripts are copied into a vault and run standalone.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _args                                                        # noqa: E402
+
+USAGE = '''\
+usage: check_links.py [<vault>] [--json] [--orphans]
+  is any wikilink broken, and what is reachable through nothing'''
+
+
 sys.stdout.reconfigure(encoding='utf-8')
 
 SKIP_DIRS = {'.obsidian', '.trash', '.git', 'node_modules', '__pycache__', '.claude'}
@@ -166,11 +176,13 @@ def scan(root):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    root = os.path.abspath(args[0]) if args else os.getcwd()
+    root, opts, done = _args.parse(sys.argv[1:], USAGE, flags=('--json', '--orphans'), values=())
+    if done:
+        print(done[1])
+        return done[0]
     r = scan(root)
     broken = r['broken']
-    if '--json' in sys.argv:
+    if opts['--json']:
         print(json.dumps(r, ensure_ascii=False, indent=2))
         return 1 if broken else 0
     print('files %d   broken links %d   no inbound wikilink %d'
@@ -182,7 +194,7 @@ def main():
         print('  BROKEN  %s:%d  ->  [[%s]]' % (b['from'], b['line'], b['target']))
     if len(broken) > 60:
         print('  ... and %d more' % (len(broken) - 60))
-    if '--orphans' in sys.argv:
+    if opts['--orphans']:
         # The honest number first, in full. The rest are a backlog to read, not defects.
         for o in r['unreachable']:
             print('  UNREACHABLE  %s' % o)

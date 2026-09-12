@@ -34,6 +34,16 @@ import re
 import sys
 import tomllib
 
+# The shared argument reader, beside this file in `_system/scripts/`. Imported by path rather
+# than by package, because these scripts are copied into a vault and run standalone.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _args                                                        # noqa: E402
+
+USAGE = '''\
+usage: validate_cards.py [<vault>] [--json] [--family a,b]
+  do the cards match their own declarations'''
+
+
 sys.stdout.reconfigure(encoding='utf-8')
 
 BLOCKER, GATE, WARN = 'BLOCKER', 'GATE', 'WARN'
@@ -535,13 +545,13 @@ def run(root, families=None):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    root = os.path.abspath(args[0]) if args else os.getcwd()
-    families = None
-    if '--family' in sys.argv:
-        families = set(sys.argv[sys.argv.index('--family') + 1].split(','))
+    root, opts, done = _args.parse(sys.argv[1:], USAGE, flags=('--json',), values=('--family',))
+    if done:
+        print(done[1])
+        return done[0]
+    families = set(opts['--family'].split(',')) if opts['--family'] else None
     findings, meta = run(root, families)
-    if '--json' in sys.argv:
+    if opts['--json']:
         print(json.dumps({'findings': findings, 'meta': meta,
                           'not_enforced': NOT_ENFORCED}, ensure_ascii=False, indent=2))
     else:

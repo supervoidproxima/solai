@@ -17,14 +17,21 @@ the cohort they belonged to.
 
 ## The convention every script here follows
 
-**The vault root is `argv[1]`, and nothing writes without `--write`.** A dry run is therefore
-always safe, and "what would this do" is answerable without a backup. A script that writes by
-default is the one nobody runs twice.
+**The vault root is the first argument, and an option nothing declared is refused by name.**
+Every script reads its arguments through `_args.py`, which sits beside them: it answers
+`--help`, it refuses an unknown option, a second path, or an option given no value, and it
+exits 2 without doing any of the work. So a mistyped invocation fails rather than quietly
+running against the wrong folder.
 
 A **generator** owns its output completely: it may be deleted and rebuilt, and anything
 hand-added to its output is lost on the next run. A **check** writes nothing and exits
 non-zero on the one condition it is named for. Nothing in this folder deletes a file (D19):
 a script may propose a deletion, and releasing it is a person's own act.
+
+This folder once promised more than it could keep: that nothing writes without `--write`. It
+was never true, and it cannot be, because a generator's whole job is to write and
+`mint_change.py`'s write IS its claim on a number. The guarantee that survived is the narrower
+one above, which is enforceable and is enforced.
 
 ## Shipped with the vault
 

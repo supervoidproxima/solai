@@ -184,7 +184,8 @@ id    = "scripts"
 path  = "_system/scripts/"
 mode  = "copied"
 from  = "runtime/"
-files = ["check_links.py", "stamp_check.py", "validate_cards.py",
+files = ["_args.py",
+         "check_links.py", "stamp_check.py", "validate_cards.py",
          "gen_dashboard.py", "check_agents.py", "check_binaries.py",
          "measure_cards.py",
          "check_sensitive.py",

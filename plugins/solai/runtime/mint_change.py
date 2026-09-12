@@ -26,6 +26,15 @@ import os
 import re
 import sys
 
+# The shared argument reader, beside this file in `_system/scripts/`. Imported by path rather
+# than by package, because these scripts are copied into a vault and run standalone.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _args                                                        # noqa: E402
+
+USAGE = '''\
+usage: mint_change.py <vault> [--title "..."] [--date YYYY-MM-DD]\n  which number is mine, claimed by creating the file'''
+
+
 STUB = """---
 id: {id}
 date: {date}
@@ -99,17 +108,13 @@ def mint(root, title, date, prefix='CHG', width=3, limit=1000):
 
 
 def main():
-    args = [a for a in sys.argv[1:]]
-    if not args:
-        print('usage: mint_change.py <vault> [--title "..."] [--date YYYY-MM-DD]')
-        return 2
-    root = os.path.abspath(args[0])
-    title, date = 'Untitled', None
-    for i, a in enumerate(args):
-        if a == '--title' and i + 1 < len(args):
-            title = args[i + 1]
-        if a == '--date' and i + 1 < len(args):
-            date = args[i + 1]
+    root, opts, done = _args.parse(sys.argv[1:], USAGE, values=('--title', '--date'),
+                                   default_root=None)
+    if done:
+        print(done[1])
+        return done[0]
+    title = opts['--title'] or 'Untitled'
+    date = opts['--date']
     if not date:
         import datetime
         date = datetime.date.today().isoformat()

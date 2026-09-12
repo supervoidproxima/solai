@@ -39,6 +39,16 @@ import re
 import sys
 import tomllib
 
+# The shared argument reader, beside this file in `_system/scripts/`. Imported by path rather
+# than by package, because these scripts are copied into a vault and run standalone.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _args                                                        # noqa: E402
+
+USAGE = '''\
+usage: check_binaries.py [<vault>] [--json] [--list]
+  is every binary described by exactly one note'''
+
+
 sys.stdout.reconfigure(encoding='utf-8')
 
 SKIP_DIRS = {'.obsidian', '.trash', '.git', 'node_modules', '__pycache__', '.claude'}
@@ -181,11 +191,13 @@ def scan(root, cfg):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    root = os.path.abspath(args[0]) if args else os.getcwd()
+    root, opts, done = _args.parse(sys.argv[1:], USAGE, flags=('--json', '--list'), values=())
+    if done:
+        print(done[1])
+        return done[0]
     cfg = config(root)
     r = scan(root, cfg)
-    if '--json' in sys.argv:
+    if opts['--json']:
         print(json.dumps({'config': cfg, **r}, ensure_ascii=False, indent=2))
         return 1 if r['claimed-twice'] else 0
     print('binaries %d   described by nothing %d   claimed twice %d'
@@ -199,7 +211,7 @@ def main():
               % (cfg.get('name-policy'), len(r['against-name-policy'])))
     for b, notes in r['claimed-twice'][:40]:
         print('  TWICE   %s  <-  %s' % (b, ', '.join(sorted(set(notes)))))
-    if '--list' in sys.argv:
+    if opts['--list']:
         for b in r['undescribed'][:80]:
             print('  UNDESCRIBED  %s' % b)
         if len(r['undescribed']) > 80:

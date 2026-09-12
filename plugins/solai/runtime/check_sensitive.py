@@ -30,6 +30,16 @@ import re
 import subprocess
 import sys
 
+# The shared argument reader, beside this file in `_system/scripts/`. Imported by path rather
+# than by package, because these scripts are copied into a vault and run standalone.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _args                                                        # noqa: E402
+
+USAGE = '''\
+usage: check_sensitive.py [<vault>]
+  is a personal identifier sitting in a file nothing would stop you committing'''
+
+
 TEXT_EXT = {'.md', '.csv', '.txt', '.json', '.toml', '.yaml', '.yml', '.html', '.htm',
             '.base', '.tsv', '.xml', '.js', '.py', '.sql'}
 
@@ -110,7 +120,10 @@ def walk(root):
 
 
 def main():
-    root = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else '.')
+    root, _opts, done = _args.parse(sys.argv[1:], USAGE)
+    if done:
+        print(done[1])
+        return done[0]
     tracked, exposed, is_repo = git_state(root)
 
     findings, unscanned = [], []

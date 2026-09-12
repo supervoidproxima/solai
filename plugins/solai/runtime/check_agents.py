@@ -35,6 +35,16 @@ import re
 import sys
 import tomllib
 
+# The shared argument reader, beside this file in `_system/scripts/`. Imported by path rather
+# than by package, because these scripts are copied into a vault and run standalone.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _args                                                        # noqa: E402
+
+USAGE = '''\
+usage: check_agents.py [<vault>] [--json]
+  does every agent declare a return schema and an eval'''
+
+
 sys.stdout.reconfigure(encoding='utf-8')
 
 OS_AGENTS = '_system/os/agents'
@@ -140,10 +150,12 @@ def scan(root):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    root = os.path.abspath(args[0]) if args else os.getcwd()
+    root, opts, done = _args.parse(sys.argv[1:], USAGE, flags=('--json',), values=())
+    if done:
+        print(done[1])
+        return done[0]
     r = scan(root)
-    if '--json' in sys.argv:
+    if opts['--json']:
         print(json.dumps(r, ensure_ascii=False, indent=2))
         return 1 if r['findings'] else 0
 
