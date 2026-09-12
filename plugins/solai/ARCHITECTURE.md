@@ -36,7 +36,7 @@ Read top to bottom as a single `--apply` travels it.
 |---|---|---|---|---|
 | 1 | Interview | the questions an archetype declares, asked once, stored as answers | `skills/solai/interview.md`, `_system/os/answers.toml` | `EVALS.md` E1-E3 |
 | 2 | Declaration | TOML: classes, lookups, agents, workflows, the manifest | `archetypes/*/`, `common/` | `lib/decl.py`, fails fast with every reason at once |
-| 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 330 assertions |
+| 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 359 assertions |
 | 4 | Plan and write | four write modes, region merge, rollback manifest | `lib/fsplan.py`, `lib/regions.py`, `lib/stamp.py` | `--plan` default; applying twice is provably a no-op |
 | 5 | Storage | the vault: Markdown plus YAML, and its compiled declarations | the vault, `_system/os/` | `runtime/validate_cards.py`, `check_links.py` |
 | 6 | Knowledge | a built `kb/`: one record per citable unit, SQLite FTS, a manifest | `skills/solai-kb/` | four build refusals; `tests/test_kb.py`, 25 assertions; the `answerable` scenario |
@@ -151,7 +151,7 @@ Four mechanisms, and only the first is advisory:
 
 | Gate | Proves |
 |---|---|
-| `tests/run_tests.py` | 330 assertions over the primitives, loaders and emitters |
+| `tests/run_tests.py` | 359 assertions over the primitives, loaders and emitters |
 | `tests/verify_engine.py` | four archetypes built, applied twice, checked and probed, plus `evolved` and `upgraded` |
 | `tests/verify_install.py` | the installer's branches on a machine that has nothing |
 
@@ -196,7 +196,9 @@ projection that is not generated will drift. This one is hand-written and theref
 Three things already drifted before it existed: `README.md` said doctrine holds 18 principles
 against 19; its `Layout` block omitted `skills/solai-kb/` and `skills/solai-release/`; and
 `tests/README.md` has now been found stale three times, at 178 against 241, at 266 against 330,
-and in six places at 0.28.0.
+and in six places at 0.28.0. This file then drifted the same way within a day of predicting it:
+two rows here said 330 while the suite stood at 355, because the release that moved the number
+edited the test README and not this one.
 
 The rule for this file is therefore the same one the test README carries: **counts are read
 off the thing, never copied forward**, and the version at the top is updated in the same commit

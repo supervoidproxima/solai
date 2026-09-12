@@ -4,7 +4,7 @@ Four commands, all run from `~/.claude/solai/plugins/solai`. Run the first two a
 change; the last two run inside `verify_engine.py` and can also be pointed at a place by hand.
 
 ```
-python tests/run_tests.py                        # 355 assertions
+python tests/run_tests.py                        # 359 assertions
 python tests/verify_engine.py                    # four archetypes, applied twice, checked, probed
 python tests/check_workflow_js.py <place>        # every projected script is real JavaScript
 python tests/check_workflow_resume.py <place>    # every script replays identically
@@ -18,7 +18,7 @@ Each exits 0 only when green, so any of them can gate a commit.
 |---|---:|---|
 | `test_primitives.py` | 62 | `fm` 14, `stamp` 11, `regions` 13, `fsplan` 8, materials 6, language 6, START-HERE 4 |
 | `test_decl.py` | 61 | 27 on one class, 31 on an archetype set, 3 on the card-skill emitter |
-| `test_compiled.py` | 25 | 7 on loading a vault's own declarations, 7 on the fate of a hand edit, 11 on the upgrade merge |
+| `test_compiled.py` | 29 | 7 on loading a vault's own declarations, 7 on the fate of a hand edit, 11 on the upgrade merge, 4 on a vault with no manifest |
 | `test_agents.py` | 34 | 22 on an agent declaration, 12 on the agent emitter |
 | `test_workflows.py` | 34 | 22 on a workflow declaration, 12 on the workflow emitter |
 | `test_authoring.py` | 35 | the renderers, the manifest wiring, the refusals, `class add\|rename\|retire` |
@@ -27,7 +27,7 @@ Each exits 0 only when green, so any of them can gate a commit.
 | `test_sensitive.py` | 11 | what `check_sensitive.py` finds, and what it refuses to print |
 | `test_change.py` | 7 | claiming a change number, including sixteen threads racing for one |
 | `test_release.py` | 6 | the order of a release, and each refusal naming itself |
-| **total** | **355** | |
+| **total** | **359** | |
 
 This table was stale on 2026-09-03 - it named 178 against a suite of 241, omitted `test_ui.py`
 entirely, and understated `test_primitives.py` by 17. It was stale again on 2026-09-12, at 266
@@ -37,7 +37,7 @@ reading has been done only because something else brought a hand to this file.
 
 Every assertion carries a stable id, and the runner **refuses a run whose assertion count does
 not match the declared expectation** - a deleted assertion is a silently weakened gate,
-so 354 of 355 passing is red for the same reason a failure is. Adding an assertion means
+so 358 of 359 passing is red for the same reason a failure is. Adding an assertion means
 raising `EXPECTED`
 in the module that owns it. That friction is deliberate: the count is part of the gate.
 
@@ -93,14 +93,17 @@ Demanding zero gates of a place that has by construction shipped nothing is a ca
 it is why this file had once been red on three archetypes out of four. `personal` runs in Russian
 because the label files are exercised nowhere else.
 
-**The three scenarios.** After the four archetypes, three runs mutate a vault that has already
+**The four scenarios.** After the four archetypes, four runs mutate a vault that has already
 been built and measured, so none of them moves the counts above. `evolved` retires a class and
 re-applies. `upgraded` takes a package upgrade over a vault declaring a class, an agent and a
-workflow the package lacks, and all three must survive it. `answerable` writes two cards and a
-document into a built vault and builds a knowledge base out of it: 4 records, the block anchor
-surviving into a citation, no record out of a file the engine generated, an identical rebuild, an
-output inside the vault refused, and every file in the vault hashed before and after to prove the
-build wrote nothing into the thing it reads.
+workflow the package lacks, and all three must survive it. `predates` removes the compiled
+manifest first and demands the same, because every scenario here builds its vault at the current
+version and so every one of them had a manifest, which is why the loader's early return for a
+missing one was unreachable while being the only path a real old vault takes. `answerable` writes
+two cards and a document into a built vault and builds a knowledge base out of it: 4 records, the
+block anchor surviving into a citation, no record out of a file the engine generated, an identical
+rebuild, an output inside the vault refused, and every file in the vault hashed before and after
+to prove the build wrote nothing into the thing it reads.
 
 **The probe.** After everything reads clean, one generated region is edited and the stamp check
 must name it. An all-clean report proves the checker ran, not that it works - a checker that

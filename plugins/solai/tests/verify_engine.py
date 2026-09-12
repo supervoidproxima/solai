@@ -73,14 +73,20 @@ identical call sequence, then kills a run mid-way and demands the surviving pref
 is the property a resume actually depends on. A live runner cache and a real model call remain
 unexercised, and are stated as such rather than implied.
 
-Three scenarios run after the four archetypes and none touches the counts above, because
+Four scenarios run after the four archetypes and none touches the counts above, because
 each mutates a vault that has already been built and measured. `evolved` retires a class from
 a `role` vault and re-applies. `upgraded` is its mirror: a `project` vault declares a class, an
 agent and a workflow that the package does not carry and then takes a package upgrade, which
 must keep all three. Those two directions are the whole contract between a vault and the
 package it was built from.
 
-`answerable` is the third: cards are written into a built vault and a knowledge base is built
+`predates` is the third. `upgraded` passes only because the vault it builds always carries a
+compiled manifest, and the one vault old enough to need an upgrade does not: the manifest is
+removed and the same upgrade must still keep the class, the agent and the workflow that only
+the vault declares. A guard that switches itself off on old vaults guards nothing, and no
+scenario could see it while every scenario built its vault at the current version.
+
+`answerable` is the fourth: cards are written into a built vault and a knowledge base is built
 out of it. The unit suite proves the build's refusals against a corpus it invents; this proves
 the pairing - that a vault THIS ENGINE produced is a corpus the build can read, that no file
 the engine generated becomes an answer, and that the vault is not written to. The last one is
@@ -468,6 +474,53 @@ def main():
             checks.append('kept what only the vault declared, through an upgrade: %s'
                           % ('ok' if ok else 'FAILED'))
             rows.append(('upgraded', 'en', 'project, a class, an agent and a workflow the package lacks',
+                         '   ' + checks[0]))
+
+        # ------------------------------------------------------- the vault predates the manifest
+        # The same upgrade, against a vault with no compiled manifest at all. Every scenario
+        # above builds its vault at the current version, so every one of them has a manifest,
+        # and the loader's early return for a missing one was therefore unreachable from here
+        # while being the only path a real old vault takes. It deleted two classes from the
+        # counselor. GAP-007 and RES-007 of the Solai vault.
+        root = os.path.join(tmp, 'project')
+        checks, ok = [], True
+        manifest = os.path.join(root, '_system', 'os', 'manifest.toml')
+        if os.path.isdir(root) and os.path.exists(manifest):
+            os.remove(manifest)
+            code, out = run([SCAFFOLD, root, '--apply', '--from-package'])
+            claude = io.open(os.path.join(root, 'CLAUDE.md'), encoding='utf-8').read()
+            index_region = claude.split('solai:begin card-index')[-1].split('solai:end')[0]
+
+            if 'kept: zeta' not in out:
+                failures.append('predates: an upgrade with no manifest reported nothing kept. '
+                                'A missing manifest says the vault is OLD, never that it '
+                                'declares nothing')
+                ok = False
+            if 'ZET' not in index_region:
+                failures.append('predates: the card index dropped the vault-only class')
+                ok = False
+            for kept in (('_system', 'os', 'classes', 'zeta.toml'),
+                         ('_system', 'os', 'agents', 'probe.toml'),
+                         ('_system', 'os', 'workflows', 'probe-job.toml'),
+                         ('.claude', 'skills', 'zeta', 'SKILL.md'),
+                         ('.claude', 'agents', 'probe.md'),
+                         ('.claude', 'workflows', 'probe-job.js')):
+                if not os.path.exists(os.path.join(root, *kept)):
+                    failures.append('predates: the upgrade dropped %s from a vault whose only '
+                                    'fault was being old' % '/'.join(kept))
+                    ok = False
+            if not os.path.exists(manifest):
+                failures.append('predates: the manifest was not written back, so the next run '
+                                'takes this path again and nothing is ever recorded')
+                ok = False
+            code2, out2 = run([SCAFFOLD, root, '--apply'])
+            if 'nothing to do' not in out2:
+                failures.append('predates: a plain run after the upgrade is not a NOOP, so the '
+                                'synthesised manifest disagrees with what is beside it')
+                ok = False
+            checks.append('upgraded a vault with no compiled manifest: %s'
+                          % ('ok' if ok else 'FAILED'))
+            rows.append(('predates', 'en', 'project, manifest removed before the upgrade',
                          '   ' + checks[0]))
 
         # ------------------------------------------------------- the vault is answerable

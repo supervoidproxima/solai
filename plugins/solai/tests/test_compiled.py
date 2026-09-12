@@ -25,6 +25,19 @@ the vault that invented it, `platform` and `subject` in the counselor. CP-15 and
 the two halves of the rule: vault-only is kept, declared-by-both goes to the package. CP-19
 is the one that would otherwise rot quietly, because a merged manifest that does not list
 what sits beside it reads as drift on the very next run and reorders every generated index.
+
+`CP-26` through `CP-29` are the case the first release of that loader missed: a vault with no
+compiled manifest at all. It read a missing manifest as "nothing declared" and handed back the
+package archetype whole, which is right for a first build and is a silent deletion for a vault
+built before the manifest existed - the counselor, and every vault an upgrade is actually for.
+CP-26 and CP-28 are the pair: declarations present with nothing recording them are kept, and an
+`_system/os/` holding no declaration at all is still the archetype whole. The distinction is
+between nothing declared and nothing RECORDED about what was declared, and a test that only
+had one of them is what let the defect ship.
+
+CP-28 passed before the fix as well, and is here for that reason rather than in spite of it:
+it holds the case the fix must NOT change. Reverting the loader turns CP-26, CP-27 and CP-29
+red and leaves CP-28 green, which is the shape a preservation assertion is supposed to have.
 """
 import os
 import shutil
@@ -32,7 +45,7 @@ import tempfile
 
 from lib import decl, engine, regions, stamp
 
-EXPECTED = 25
+EXPECTED = 29
 NAME = 'compiled'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -316,4 +329,42 @@ def group_merge(s):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-GROUPS = (group_compiled, group_merge)
+def group_predates(s):
+    """A vault older than the compiled manifest: declarations on disk, nothing listing them."""
+    tmp = tempfile.mkdtemp(prefix='solai-test-pd-')
+    try:
+        agent = decl._read_text(os.path.join(PKG_ROOT, 'common', 'agents', 'scout.toml'))
+        mine_a = agent.replace('agent = "scout"', 'agent = "probe"', 1)
+
+        # The counselor's shape: `_system/os/classes/` holding a class of the vault's own,
+        # and no `manifest.toml` anywhere, because the engine that built it compiled none.
+        root = _vault(tmp, classes={'zeta': ZETA}, agents={'probe': mine_a})
+        os.remove(os.path.join(root, '_system', 'os', 'manifest.toml'))
+        arch, notes = decl.load_merged(PKG_ROOT, root, 'project')
+        names = [c.name for c in arch.classes]
+
+        s.ok('CP-26', 'a class the vault declares alone survives an upgrade with NO manifest',
+             'zeta' in names and 'gap' in names and arch.kept == ['zeta', 'probe'],
+             'the absence of a manifest says the vault is old, never that it declares '
+             'nothing. Got %r kept %r' % (names, arch.kept))
+
+        s.ok('CP-27', 'the kept class is named in a note, as it is when a manifest exists',
+             any('zeta' in n and 'Kept' in n for n in notes), repr(notes))
+
+        # Nothing declared, as against nothing recorded about what was declared. An
+        # `_system/os/` a first build has just made, holding no declaration, is the first.
+        empty = tempfile.mkdtemp(dir=tmp)
+        os.makedirs(os.path.join(empty, '_system', 'os', 'classes'))
+        fresh, none = decl.load_merged(PKG_ROOT, empty, 'project')
+        s.eq('CP-28', 'an _system/os holding no declaration is still the archetype whole',
+             (fresh.kept, none, fresh.manifest_text), ([], [], None))
+
+        s.ok('CP-29', 'an agent declared alone survives it too, by the same rule',
+             'probe' in [a.name for a in arch.agents]
+             and any("agents: 'probe'" in n and 'Kept' in n for n in notes),
+             repr([a.name for a in arch.agents]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+GROUPS = (group_compiled, group_merge, group_predates)

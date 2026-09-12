@@ -735,6 +735,90 @@ def load_archetype(pkg_root, name):
     return arch
 
 
+def _discover(os_dir, kind, make, check, listed, errors, notes):
+    """Every declaration of one kind, found by listing the directory it lives in.
+
+    `listed` is what the manifest says about this kind, or None where there is no manifest.
+    None is not the empty list: comparing against a list that does not exist would report
+    every declaration in the vault as an addition.
+    """
+    d = os.path.join(os_dir, kind)
+    found = {}
+    for name in sorted(os.listdir(d)) if os.path.isdir(d) else ():
+        if not name.endswith('.toml'):
+            continue
+        p = os.path.join(d, name)
+        try:
+            obj = make(_read(p), p)
+        except tomllib.TOMLDecodeError as exc:
+            errors.append('%s: not valid TOML: %s' % (p, exc))
+            continue
+        key = getattr(obj, 'name', None)
+        if not key:
+            errors.append('%s: declares no name, so nothing can be projected from it.' % p)
+            continue
+        check(obj, errors)
+        found[key] = obj
+    if listed is None:
+        return found
+    for gone in [n for n in listed if n not in found]:
+        notes.append('%s: the manifest lists %r and no declaration is compiled in. Read '
+                     'as retired.' % (kind, gone))
+    for extra in [n for n in found if n not in listed]:
+        notes.append('%s: %r is compiled in and the manifest does not list it. Read as '
+                     'added.' % (kind, extra))
+    return found
+
+
+class _Declared(object):
+    """The vault side of a merge, for a vault that predates the compiled manifest.
+
+    Only the attributes `load_merged` reads. It is deliberately not an `Archetype`: with no
+    manifest there is no title, no tier and no statement of which declarations are lookups,
+    and inventing any of those would be this defect in reverse.
+    """
+
+    def __init__(self, classes, agents, workflows):
+        self.classes = classes
+        self.lookups = []
+        self.agents = agents
+        self.workflows = workflows
+        self.lookup_names = ()
+
+
+def _declared(vault_root):
+    """What a vault declares, read off its directories rather than off a manifest.
+
+    -> (declared, notes, errors), where `declared` is None when there is genuinely nothing.
+
+    A missing `manifest.toml` says the vault was built before the engine compiled one in. It
+    does NOT say the vault declares nothing, and reading it that way dropped both classes of
+    the one vault old enough to need an upgrade: `GAP-007` of the Solai vault, found by
+    running a real migration plan and reading the line `0 declared only by this vault`.
+
+    The distinction this turns on is between nothing declared and nothing RECORDED about
+    what was declared. A first build is the first: no `_system/os/`, or one with no
+    declaration in it, and the package archetype whole is the right answer. Anything else is
+    the second.
+
+    Which declarations are lookups cannot be recovered here, because the manifest is the
+    only place it is written down. A kept declaration therefore arrives as a class, and the
+    note names it, so the one case this cannot get right is visible rather than silent.
+    """
+    os_dir = os.path.join(vault_root, '_system', 'os')
+    if not os.path.isdir(os_dir):
+        return None, [], []
+    errors, notes = [], []
+    cards = _discover(os_dir, 'classes', CardClass, _validate_class, None, errors, notes)
+    agents = _discover(os_dir, 'agents', Agent, _validate_agent, None, errors, notes)
+    flows = _discover(os_dir, 'workflows', Workflow, _validate_workflow, None, errors, notes)
+    if not (cards or agents or flows):
+        return None, [], []
+    return (_Declared([cards[n] for n in sorted(cards)],
+                      [agents[n] for n in sorted(agents)],
+                      [flows[n] for n in sorted(flows)]), notes, errors)
+
+
 def _compiled(vault_root):
     """A vault's own declarations, read and each one validated, but NOT checked as a set.
 
@@ -771,30 +855,7 @@ def _compiled(vault_root):
     errors, notes = [], []
 
     def discover(kind, make, check, listed):
-        d = os.path.join(os_dir, kind)
-        found = {}
-        for name in sorted(os.listdir(d)) if os.path.isdir(d) else ():
-            if not name.endswith('.toml'):
-                continue
-            p = os.path.join(d, name)
-            try:
-                obj = make(_read(p), p)
-            except tomllib.TOMLDecodeError as exc:
-                errors.append('%s: not valid TOML: %s' % (p, exc))
-                continue
-            key = getattr(obj, 'name', None)
-            if not key:
-                errors.append('%s: declares no name, so nothing can be projected from it.' % p)
-                continue
-            check(obj, errors)
-            found[key] = obj
-        for gone in [n for n in listed if n not in found]:
-            notes.append('%s: the manifest lists %r and no declaration is compiled in. Read '
-                         'as retired.' % (kind, gone))
-        for extra in [n for n in found if n not in listed]:
-            notes.append('%s: %r is compiled in and the manifest does not list it. Read as '
-                         'added.' % (kind, extra))
-        return found
+        return _discover(os_dir, kind, make, check, listed, errors, notes)
 
     def ordered(found, listed):
         """Manifest order first, then anything discovered beside it, alphabetically.
@@ -887,6 +948,14 @@ def load_merged(pkg_root, vault_root, name):
     done nothing the engine tells it not to. The failure would have been identical and the
     excuse would have been worse for having been written down.
 
+    A VAULT WITH NO COMPILED MANIFEST still declares what is in its directories. The first
+    release of this loader read a missing manifest as "nothing to merge with" and handed back
+    the package archetype whole, which is correct for a first build and is a deletion for
+    every vault built before the manifest existed - which is precisely the set of vaults an
+    upgrade is for. `_declared` covers that case by listing the same directories `_compiled`
+    lists, and the first build is told apart by there being no declaration at all rather than
+    by the absence of a file that records them.
+
     A kept declaration keeps its OWN path, inside `_system/os/`, so the engine plans a write
     of the file over itself and the row reads NOOP. The merged manifest is rendered here
     rather than copied, because the package manifest does not list the kept names and a
@@ -894,12 +963,16 @@ def load_merged(pkg_root, vault_root, name):
     """
     pkg = load_archetype(pkg_root, name)
     compiled = os.path.join(vault_root, '_system', 'os', 'manifest.toml')
-    if not os.path.exists(compiled):
-        # Nothing to merge with: a first build, or a vault older than the compiled manifest.
-        # Both are the package archetype whole, which is what `load_archetype` already gives.
-        return pkg, []
-
-    local, notes, errors = _compiled(vault_root)
+    if os.path.exists(compiled):
+        local, notes, errors = _compiled(vault_root)
+    else:
+        # No manifest is TWO different states and this once treated them as one: a first
+        # build, where nothing is declared, and a vault older than the compiled manifest,
+        # where plenty is declared and nothing records it. Returning the package archetype
+        # whole is right for the first and deletes a class in the second.
+        local, notes, errors = _declared(vault_root)
+        if local is None:
+            return pkg, notes
     if errors:
         raise DeclError(errors)
 
