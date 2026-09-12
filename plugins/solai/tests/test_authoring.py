@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""16 assertions on the authoring verbs: the renderers, the wiring, and the refusals.
+"""35 assertions on the authoring verbs: the renderers, the wiring, and the refusals.
 
 The authoring script is the one part of the package that WRITES INTO THE PACKAGE, so its
 failure mode is worse than a bad projection: it can leave the declarations in a state where
@@ -18,7 +18,7 @@ import shutil
 import sys
 import tempfile
 
-from lib import decl
+from lib import decl, fsplan
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG = os.path.dirname(HERE)
@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(PKG, 'skills', 'solai'))
 
 import author as AU                                                 # noqa: E402
 
-EXPECTED = 16
+EXPECTED = 35
 NAME = 'authoring'
 
 AGENT_ARGS = {
@@ -152,4 +152,158 @@ def group_refusals(s):
          'one word meaning two things wrote kind = "agent" into [returns] in the first draft')
 
 
-GROUPS = (group_render, group_wiring, group_refusals)
+
+
+CLASS_ARGS = {
+    'prefix': 'PRB',
+    'folder': 'registry/probes',
+    'purpose': 'One probe of a fixture, carrying whatever the assertions below need to read.',
+    'status': 'lifecycle=on-review,open;terminal=archived',
+    'status_notes': ['value=open;note=live, and being worked.'],
+    'fields': ['name=text;type=scalar;card=1;required=true;meaning=What the probe says.',
+               'name=severity;type=enum;values=high,medium,low;meaning=By consequence.'],
+    'links': ['field=gap;target=gap;kind=one-way;meaning=The gap it bears on.'],
+    'h2s': ['## What it is', '## What follows'],
+    'optional_h2s': [],
+}
+
+
+def _load_class(text, tmp, name='probe'):
+    p = os.path.join(tmp, '%s.toml' % name)
+    io.open(p, 'w', encoding='utf-8', newline='\n').write(text)
+    return decl.load_class(p)
+
+
+def group_class(s):
+    tmp = tempfile.mkdtemp(prefix='solai-test-cls-')
+    try:
+        c = _load_class(AU.class_toml('probe', dict(CLASS_ARGS)), tmp)
+        s.ok('AU-17', 'the rendered class declaration loads and carries what was asked for',
+             c.name == 'probe' and c.prefix == 'PRB' and c.folder == 'registry/probes'
+             and [f.name for f in c.fields] == ['text', 'severity']
+             and c.field('severity').values == ['high', 'medium', 'low']
+             and [l.field for l in c.links] == ['gap']
+             and c.required_h2 == ['## What it is', '## What follows'],
+             repr([f.name for f in c.fields]))
+
+        s.ok('AU-18', 'the default view shows the column it sorts by',
+             'status' in c.view_columns and c.view_sort[0]['property'] == 'status',
+             'a view ordered by a column it does not display looks arbitrarily ordered')
+
+        s.ok('AU-19', 'a rubric is offered for every enum the class declares',
+             c.skill_rubrics == ['severity'],
+             'an enum with no rubric is a list of words picked from by feel')
+
+        s.ok('AU-20', 'the status default is the first lifecycle value when none is given',
+             c.status_default == 'on-review' and c.terminal == ['archived']
+             and c.status_notes.get('open', '').startswith('live'), repr(c.status_default))
+
+        bad = dict(CLASS_ARGS)
+        bad['links'] = ['field=twin;target=gap;kind=bidirectional;meaning=No reciprocal named.']
+        raised = []
+        try:
+            _load_class(AU.class_toml('probe', bad), tmp, 'probe-recip')
+        except decl.DeclError as e:
+            raised = e.errors
+        s.ok('AU-21', 'a bidirectional link naming no reciprocal is caught before it is planned',
+             any('reciprocal' in x for x in raised), repr(raised))
+
+        bad2 = dict(CLASS_ARGS)
+        bad2['links'] = ['field=other;target=gap;kind=lateral;meaning=Lateral to another class.']
+        raised2 = []
+        try:
+            _load_class(AU.class_toml('probe', bad2), tmp, 'probe-lateral')
+        except decl.DeclError as e:
+            raised2 = e.errors
+        s.ok('AU-22', 'a lateral link pointing at another class is caught',
+             any('lateral' in x.lower() for x in raised2), repr(raised2))
+
+        bad3 = dict(CLASS_ARGS)
+        bad3['fields'] = ['name=band;type=enum;meaning=An enum with no values at all.']
+        raised3 = []
+        try:
+            _load_class(AU.class_toml('probe', bad3), tmp, 'probe-enum')
+        except decl.DeclError as e:
+            raised3 = e.errors
+        s.ok('AU-23', 'an enum field declaring no values and no source is caught',
+             any('no values' in x for x in raised3), repr(raised3))
+
+        slug = _load_class(AU.class_toml('probe', dict(CLASS_ARGS, filename='slug')),
+                           tmp, 'probe-slug')
+        s.ok('AU-24', 'a slug-named class carries an id column, which the validator requires',
+             slug.filename == 'slug' and 'id' in slug.view_columns, repr(slug.view_columns))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def group_class_refusals(s):
+    s.ok('AU-25', 'a prefix already in use names the class holding it',
+         (AU.prefix_taken('GAP', ['project']) or '').find("'gap'") >= 0,
+         repr(AU.prefix_taken('GAP', ['project'])))
+
+    s.eq('AU-26', 'a prefix nothing uses is free', AU.prefix_taken('ZQX', ['project']), None)
+
+    dup = ('A finding framed as the difference between current and desired state, an '
+           'observation in the IIA sense rather than an accusation.')
+    s.ok('AU-27', 'a purpose restating an existing class is refused, naming it',
+         AU.job_overlap(dup, 'classes', 'purpose') is not None,
+         repr(AU.job_overlap(dup, 'classes', 'purpose')))
+
+    fresh = ('One bank statement line reconciled against the closing balance the bank itself '
+             'printed on the document.')
+    s.eq('AU-28', 'a genuinely different purpose is not refused',
+         AU.job_overlap(fresh, 'classes', 'purpose'), None)
+
+
+
+
+SIBLING = ('schema = 1\nclass     = "resolution"\nprefix    = "RES"\nfolder    = "x"\n'
+           'skill     = "resolution"\nminted_by = "skill:resolution"\n\n'
+           '[[links]]\nfield   = "gap"\ntarget  = "gap"\nkind    = "bidirectional"\n'
+           'reciprocal = "resolution"\nmeaning = "The gap this closes, and the gap that a gap '
+           'without a gap would leave."\n')
+
+
+def group_class_ops(s):
+    out, hits = AU.rename_in_toml(SIBLING, 'gap', 'finding')
+    s.ok('AU-29', 'a rename rewrites the keys that hold a name and never the prose that '
+                  'mentions it',
+         'field   = "finding"' in out and 'target  = "finding"' in out
+         and 'a gap without a gap would leave' in out and hits == 2,
+         repr([l for l in out.splitlines() if 'meaning' in l]))
+
+    own = ('schema = 1\nclass     = "gap"\nskill     = "gap"\n'
+           'minted_by = "skill:gap"\n')
+    out2, hits2 = AU.rename_in_toml(own, 'gap', 'finding')
+    s.ok('AU-30', 'the class, its skill and its minted_by all follow the new name',
+         'class     = "finding"' in out2 and 'skill     = "finding"' in out2
+         and 'minted_by = "skill:finding"' in out2 and hits2 == 3, repr(out2))
+
+    MAN = ('schema = 1\narchetype = "x"\n\nclasses = ["gap", "pain"]\nagents = []\n'
+           'workflows = []\n\n[interview]\nasks = []\n')
+    dropped, err = AU.remove_from_list(MAN, 'classes', 'gap')
+    s.ok('AU-31', 'a retired class leaves the selection list without a stray comma',
+         err is None and 'classes = ["pain"]' in dropped, repr(dropped))
+
+    _, err2 = AU.remove_from_list(MAN, 'classes', 'nothing-here')
+    s.eq('AU-32', 'removing a name that is not listed is reported, not silently done',
+         err2, 'not listed')
+
+    refs = AU.class_references('gap', ['project'])
+    s.ok('AU-33', 'a retirement sees the sibling declarations that still link to the class',
+         any('resolution.toml' in r for r in refs) and any('loop step' in r for r in refs),
+         repr(refs))
+
+    dlv = AU.class_references('deliverable', ['role'])
+    s.ok('AU-34', 'a retirement sees a prefix hardcoded in a runtime checker',
+         any('validate_cards.py' in r and 'DLV' in r for r in dlv),
+         'CHG-008 deleted a class whose prefix AV-3 still counted, and the gate read zero for '
+         'sixty-four records')
+
+    p = fsplan.Plan(PKG, '0.0.0')
+    p.delete('archetypes/x/classes/y.toml', 'declaration', reason='retired')
+    s.ok('AU-35', 'a planned deletion prints as its own row, so a retirement is visible',
+         'DELETE' in p.table() and 'retired' in p.table(), repr(p.table()))
+
+
+GROUPS = (group_render, group_wiring, group_refusals, group_class, group_class_refusals, group_class_ops)

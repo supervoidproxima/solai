@@ -24,6 +24,10 @@ import time
 from . import stamp
 
 WRITE, NOOP, SKIP, COPY, MKDIR = 'WRITE', 'NOOP', 'SKIP', 'COPY', 'MKDIR'
+# DELETE exists so that retiring a declaration is a planned, backed-up, rollback-able act
+# like every other. Before it, the only honest retirement was a hand `rm`, which leaves no
+# row in the table, no pre-image in the manifest and nothing to roll back to.
+DELETE = 'DELETE'
 
 
 def w(p):
@@ -100,6 +104,11 @@ class Plan(object):
 
     def copy(self, rel, artefact, source_path):
         return self.add(Action(COPY, rel, artefact, content=source_path))
+
+    def delete(self, rel, artefact, reason=''):
+        """Remove a file that exists. The pre-image is captured and backed up by `apply`,
+        so `rollback` restores it through the same path as an overwrite."""
+        return self.add(Action(DELETE, rel, artefact, reason=reason or 'retired'))
 
     def mkdir(self, rel, artefact='folders'):
         # A folder is created once. Two callers can legitimately ask for the same one - a
@@ -179,7 +188,10 @@ def apply(plan, manifest_path, backup_dir=None):
             bak = os.path.join(backup_dir, a.rel.replace('/', os.sep))
             os.makedirs(w(os.path.dirname(bak)), exist_ok=True)
             shutil.copy2(w(target), w(bak))
-        if a.kind == COPY:
+        if a.kind == DELETE:
+            if exists(target):
+                os.remove(w(target))
+        elif a.kind == COPY:
             os.makedirs(w(os.path.dirname(target)), exist_ok=True)
             shutil.copy2(w(a.content), w(target))
         else:

@@ -3,6 +3,11 @@
 
     py author.py agent <name> --job "..." --returns "..." --eval "..." [--archetype a,b] [--apply]
     py author.py workflow <name> --goal "..." --input "..." --output "..." --phase "..." [--apply]
+    py author.py class add <name> --prefix XXX --folder <dir> --purpose "..." \
+        --status "lifecycle=a,b;terminal=c" --field "name=..;type=..;meaning=.." \
+        --archetype <a> [--link "field=..;target=..;kind=.."] [--h2 "## ..."] [--apply]
+    py author.py class rename <old> <new> --archetype <a> [--apply]
+    py author.py class retire <name> --archetype <a> [--apply]
 
 `--plan` is the default and writes nothing, like every other entry point here.
 
@@ -153,6 +158,166 @@ def workflow_toml(name, o):
     return '\n'.join(lines) + '\n'
 
 
+
+def class_toml(name, o):
+    """Render a card-class declaration.
+
+    Everything `_validate_class` requires is taken from the command line, never defaulted into
+    existence: a class with an invented prefix or a guessed status set loads fine and means
+    nothing, which is the failure mode this whole entry point exists to prevent.
+    """
+    st = _kv(o.get('status', ''))
+    lifecycle = [x.strip() for x in st.get('lifecycle', '').split(',') if x.strip()]
+    terminal = [x.strip() for x in st.get('terminal', '').split(',') if x.strip()]
+    default = st.get('default') or (lifecycle[0] if lifecycle else '')
+    skill = o.get('skill') or name
+    filename = o.get('filename', 'bare-id')
+
+    lines = ['schema = 1', '']
+    if o.get('why'):
+        lines += ['# %s' % o['why'], '']
+    lines += [
+        'class     = %s' % _toml_str(name),
+        'prefix    = %s' % _toml_str(o['prefix']),
+        'folder    = %s' % _toml_str(o['folder']),
+        'skill     = %s' % _toml_str(skill),
+        'title     = %s' % _toml_str(o.get('title') or name.replace('-', ' ').title()),
+        'purpose   = %s' % _toml_str(o['purpose']),
+        'minted_by = %s' % _toml_str('skill:%s' % skill),
+        'filename  = %s' % _toml_str(filename),
+    ]
+    if o.get('archive-folder'):
+        lines.append('archive_folder = %s' % _toml_str(o['archive-folder']))
+
+    lines += ['', '[status]']
+    if lifecycle:
+        lines.append('lifecycle = %s' % _toml_list(lifecycle))
+    if terminal:
+        lines.append('terminal  = %s' % _toml_list(terminal))
+    if default:
+        lines.append('default   = %s' % _toml_str(default))
+    notes = [_kv(n) for n in o.get('status_notes', [])]
+    notes = [(d.get('value', ''), d.get('note', '')) for d in notes]
+    notes = [(v, n) for v, n in notes if v]
+    if notes:
+        lines += ['', '[status.notes]']
+        for v, n in notes:
+            lines.append('%s = %s' % (_toml_str(v), _toml_str(n)))
+    lines += ['', '[status.rules]',
+              'terminal_callout        = true',
+              'terminal_relaxes_schema = false']
+
+    for spec in o['fields']:
+        d = _kv(spec)
+        lines += ['', '[[fields]]',
+                  'name    = %s' % _toml_str(d.get('name', '')),
+                  'type    = %s' % _toml_str(d.get('type', 'scalar')),
+                  'card    = %s' % _toml_str(d.get('card', '0..1'))]
+        if d.get('required', '').lower() in ('true', 'yes', '1'):
+            lines.append('required = true')
+        if d.get('values'):
+            lines.append('values  = %s' % _toml_list(
+                [v.strip() for v in d['values'].split(',') if v.strip()]))
+        if d.get('source'):
+            lines.append('source  = %s' % _toml_str(d['source']))
+        if d.get('no_default', '').lower() in ('true', 'yes', '1'):
+            lines.append('no_default = true')
+        if d.get('derived_by'):
+            lines.append('derived_by = %s' % _toml_str(d['derived_by']))
+        lines.append('meaning = %s' % _toml_str(d.get('meaning', '')))
+
+    for spec in o['links']:
+        d = _kv(spec)
+        lines += ['', '[[links]]',
+                  'field   = %s' % _toml_str(d.get('field', '')),
+                  'target  = %s' % _toml_str(d.get('target', '')),
+                  'card    = %s' % _toml_str(d.get('card', '0..N')),
+                  'kind    = %s' % _toml_str(d.get('kind', 'one-way'))]
+        if d.get('reciprocal'):
+            lines.append('reciprocal = %s' % _toml_str(d['reciprocal']))
+        lines.append('meaning = %s' % _toml_str(d.get('meaning', '')))
+
+    cite = o.get('cite', 'footnotes')
+    lines += ['', '[body]']
+    if o['h2s']:
+        lines.append('required_h2 = %s' % _toml_list(o['h2s']))
+    if o['optional_h2s']:
+        lines.append('optional_h2 = %s' % _toml_list(o['optional_h2s']))
+    if cite == 'footnotes':
+        lines.append('sources_h3  = %s' % _toml_str('### Sources'))
+    lines.append('cite_style  = %s' % _toml_str(cite))
+
+    lines += ['', '[view]',
+              'columns = %s' % _toml_list(class_view_columns(o, filename))]
+    lines += ['', '[[view.sort]]',
+              'property  = %s' % _toml_str('status'),
+              'direction = %s' % _toml_str('ASC')]
+
+    lines += ['', '[card-skill]',
+              'modes    = %s' % _toml_list(
+                  [m.strip() for m in o.get('modes', 'single').split(',') if m.strip()]),
+              'shared   = %s' % _toml_list(
+                  ['status-protocol', 'card-concision', 'block-id-protocol']),
+              'rubrics  = %s' % _toml_list(class_rubrics(o)),
+              'triggers = %s' % _toml_list(
+                  [t.strip() for t in o.get('triggers', '').split(';') if t.strip()]),
+              'induces  = %s' % _toml_str(o.get('induces', 'none'))]
+    return '\n'.join(lines) + '\n'
+
+
+def class_view_columns(o, filename):
+    """`file.name`, then every declared name, then tags.
+
+    Built rather than asked for, because `_validate_class` rejects a column that is not a
+    declared field or link, and a view is the one projection nobody reads until it is wrong.
+    """
+    if o.get('view'):
+        return [c.strip() for c in o['view'].split(',') if c.strip()]
+    cols = ['file.name']
+    if filename == 'slug':
+        cols.append('id')
+    #  is named explicitly because the default sort is on it, and a view that orders by
+    # a column it does not show is a view whose order looks arbitrary.
+    cols.append('status')
+    cols += [_kv(f).get('name', '') for f in o['fields']]
+    cols += [_kv(l).get('field', '') for l in o['links']]
+    cols = [c for c in cols if c]
+    return cols + ['tags']
+
+
+def class_rubrics(o):
+    """A rubric is a `How to choose X` table in the generated skill. Offered for every enum the
+    class declares, because an enum with no rubric is a list of words the author picks from by
+    feel, and `severity` picked by feel is how a register ends up all-high."""
+    if o.get('rubrics'):
+        return [r.strip() for r in o['rubrics'].split(',') if r.strip()]
+    out = []
+    for f in o['fields']:
+        d = _kv(f)
+        if d.get('type') == 'enum' and d.get('values'):
+            out.append(d.get('name', ''))
+    return [r for r in out if r]
+
+
+def prefix_taken(prefix, archetypes):
+    """One prefix, one class, within any archetype this would be selected into."""
+    for arch in archetypes:
+        root = os.path.join(PKG, 'archetypes', arch, 'classes')
+        if not os.path.isdir(root):
+            continue
+        for f in sorted(os.listdir(root)):
+            if not f.endswith('.toml'):
+                continue
+            try:
+                data = decl._read(os.path.join(root, f))
+            except Exception:                                       # noqa: BLE001
+                continue
+            if (data.get('prefix') or '').upper() == prefix.upper():
+                return ('prefix %r is already %r in archetype %r. An identifier prefix is how a '
+                        'card is found, and two classes sharing one makes every ID ambiguous.'
+                        % (prefix, data.get('class'), arch))
+    return None
+
 # --------------------------------------------------------------------------- manifest wiring
 
 def add_to_list(text, key, name):
@@ -217,14 +382,241 @@ def job_overlap(job, kind='agents', field='job'):
     return None
 
 
+
+# --------------------------------------------------------------------------- rename and retire
+
+# Only these keys ever hold a class NAME. `meaning` holds prose that mentions class names all
+# the time ("The gap this bears on."), and rewriting prose on a rename is how a declaration
+# ends up asserting something nobody wrote. Line-anchored, quoted, exact.
+NAME_KEYS = ('class', 'skill', 'target', 'field', 'reciprocal')
+
+
+def rename_in_toml(text, old, new):
+    """Rewrite every key that holds the class name, and nothing else. Returns (text, hits)."""
+    hits = 0
+    for key in NAME_KEYS:
+        rx = re.compile(r'(?m)^(\s*%s\s*=\s*)"%s"' % (re.escape(key), re.escape(old)))
+        text, k = rx.subn(lambda m: '%s"%s"' % (m.group(1), new), text)
+        hits += k
+    rx = re.compile(r'(?m)^(\s*minted_by\s*=\s*)"skill:%s"' % re.escape(old))
+    text, k = rx.subn(lambda m: '%s"skill:%s"' % (m.group(1), new), text)
+    return text, hits + k
+
+
+def remove_from_list(text, key, name):
+    """Drop `name` from the top-level `key = [...]` line. Mirror of `add_to_list`."""
+    rx = re.compile(r'(?m)^(%s\s*=\s*\[)([^\]]*)(\])' % re.escape(key))
+    m = rx.search(text)
+    if not m:
+        return None, '%s: no top-level `%s = [...]` line to edit' % (key, key)
+    items = [x.strip() for x in m.group(2).split(',') if x.strip()]
+    kept = [x for x in items if x.strip('"') != name]
+    if len(kept) == len(items):
+        return None, 'not listed'
+    return text[:m.start()] + m.group(1) + ', '.join(kept) + m.group(3) + text[m.end():], None
+
+
+def class_paths(name, archetypes):
+    """Where this class is declared, per archetype that declares it."""
+    out = []
+    for arch in archetypes:
+        rel = 'archetypes/%s/classes/%s.toml' % (arch, name)
+        if os.path.exists(os.path.join(PKG, rel.replace('/', os.sep))):
+            out.append((arch, rel))
+    return out
+
+
+def class_references(name, archetypes, skip_own=True):
+    """Everything outside this class's own declaration that still names it.
+
+    This is the check a retirement turns on. `CHG-008` of the counselor vault deleted a class
+    whose prefix an assertion still counted, and the gate read zero for sixty-four records
+    before anyone read it as a defect rather than a finding. Four surfaces, all of them
+    mechanical: sibling declarations, the manifest's own loop, the selection list, and a
+    prefix written into a runtime checker.
+    """
+    hits = []
+    prefix = None
+    for arch, rel in class_paths(name, archetypes):
+        try:
+            prefix = (decl._read(os.path.join(PKG, rel.replace('/', os.sep))).get('prefix')
+                      or prefix)
+        except Exception:                                           # noqa: BLE001
+            pass
+
+    for arch in archetypes:
+        root = os.path.join(PKG, 'archetypes', arch, 'classes')
+        if os.path.isdir(root):
+            for f in sorted(os.listdir(root)):
+                if not f.endswith('.toml') or (skip_own and f == '%s.toml' % name):
+                    continue
+                try:
+                    data = decl._read(os.path.join(root, f))
+                except Exception:                                   # noqa: BLE001
+                    continue
+                for l in data.get('links', []):
+                    if l.get('target') == name:
+                        hits.append('archetypes/%s/classes/%s links `%s` at target %r'
+                                    % (arch, f, l.get('field'), name))
+                    if l.get('reciprocal') == name:
+                        hits.append('archetypes/%s/classes/%s names %r as a reciprocal field'
+                                    % (arch, f, name))
+        mpath = os.path.join(PKG, 'archetypes', arch, 'manifest.toml')
+        if os.path.exists(mpath):
+            try:
+                man = decl._read(mpath)
+            except Exception:                                       # noqa: BLE001
+                man = {}
+            for step in man.get('loop', []):
+                if re.search(r'/%s\b' % re.escape(name), str(step.get('skill', ''))):
+                    hits.append('archetypes/%s/manifest.toml loop step %s calls `/%s`'
+                                % (arch, step.get('n'), name))
+
+    if prefix:
+        rt = os.path.join(PKG, 'runtime')
+        for f in sorted(os.listdir(rt)) if os.path.isdir(rt) else []:
+            if not f.endswith('.py'):
+                continue
+            body = fsplan.read(os.path.join(rt, f))
+            if re.search(r'["\']%s["\']' % re.escape(prefix), body):
+                hits.append('runtime/%s hardcodes the prefix %r, so an assertion would keep '
+                            'counting a class that no longer exists' % (f, prefix))
+    return hits
+
+
+def do_rename(o, old, new):
+    """Rewrite the declaration and every key that names it. Projections are the engine's job."""
+    problems = []
+    if not new or new != new.lower() or '_' in new or ' ' in new:
+        problems.append('the new name must be lowercase kebab-case: got %r' % new)
+    taken = name_taken(new)
+    if taken:
+        problems.append(taken)
+    if not o['archetypes']:
+        problems.append('--archetype is required: a class is declared inside one.')
+    found = class_paths(old, o['archetypes'])
+    if o['archetypes'] and not found:
+        problems.append('no class %r declared in %s.' % (old, ', '.join(o['archetypes'])))
+    if problems:
+        print('\nrefused:')
+        for p in problems:
+            print('  %s' % p)
+        return 1
+
+    plan = fsplan.Plan(PKG, VERSION)
+    for arch, rel in found:
+        body, _ = rename_in_toml(fsplan.read(os.path.join(PKG, rel.replace('/', os.sep))),
+                                 old, new)
+        plan.write('archetypes/%s/classes/%s.toml' % (arch, new), 'declaration', body)
+        plan.delete(rel, 'declaration', reason='renamed to %s' % new)
+
+        mrel = 'archetypes/%s/manifest.toml' % arch
+        cur = fsplan.read(os.path.join(PKG, mrel.replace('/', os.sep)))
+        cur = re.sub(r'(?m)^(classes\s*=\s*\[[^\]]*)"%s"' % re.escape(old),
+                     lambda m: '%s"%s"' % (m.group(1), new), cur)
+        cur = re.sub(r'(?m)^(\s*skill\s*=\s*"[^"]*)/%s\b' % re.escape(old),
+                     lambda m: '%s/%s' % (m.group(1), new), cur)
+        plan.write(mrel, 'selection', cur)
+
+        root = os.path.join(PKG, 'archetypes', arch, 'classes')
+        for f in sorted(os.listdir(root)):
+            if not f.endswith('.toml') or f == '%s.toml' % old:
+                continue
+            srel = 'archetypes/%s/classes/%s' % (arch, f)
+            body2, hits = rename_in_toml(
+                fsplan.read(os.path.join(PKG, srel.replace('/', os.sep))), old, new)
+            if hits:
+                plan.write(srel, 'declaration', body2)
+
+    print()
+    print(plan.table())
+    print('\n  The `folder` key is not renamed: a folder is a path, not a name, and moving the\n'
+          '  cards already in it is a vault migration this verb does not perform.')
+    print('  Vaults already built are unaffected. They read their own compiled declarations,\n'
+          '  so their cards keep the old key until each is migrated on its own record.')
+    return finish(plan, o)
+
+
+def do_retire(o, name):
+    """Delete the declaration, but only once nothing else in the package still names it."""
+    problems = []
+    if not o['archetypes']:
+        problems.append('--archetype is required: a class is declared inside one.')
+    found = class_paths(name, o['archetypes'])
+    if o['archetypes'] and not found:
+        problems.append('no class %r declared in %s.' % (name, ', '.join(o['archetypes'])))
+    refs = class_references(name, o['archetypes']) if found else []
+    if refs:
+        problems.append('%d thing(s) still name %r. Retiring it now repeats CHG-008:'
+                        % (len(refs), name))
+        problems += ['  - %s' % r for r in refs]
+    if problems:
+        print('\nrefused:')
+        for p in problems:
+            print('  %s' % p)
+        return 1
+
+    plan = fsplan.Plan(PKG, VERSION)
+    for arch, rel in found:
+        plan.delete(rel, 'declaration', reason='retired')
+        mrel = 'archetypes/%s/manifest.toml' % arch
+        cur = fsplan.read(os.path.join(PKG, mrel.replace('/', os.sep)))
+        new, err = remove_from_list(cur, 'classes', name)
+        if err == 'not listed':
+            plan.noop(mrel, 'selection', reason='not listed')
+            continue
+        if err:
+            print('\nrefused: %s' % err)
+            return 1
+        plan.write(mrel, 'selection', new)
+
+    print()
+    print(plan.table())
+    print('\n  The generated skill and the cards already written are NOT deleted here. The\n'
+          '  engine reports the orphaned skill on the next run; the cards are evidence, and\n'
+          '  what happens to them is a decision with a change record, not a side effect.')
+    return finish(plan, o)
+
+
+def finish(plan, o):
+    """Apply or stop, then prove the package still loads. Shared by rename and retire."""
+    if o['mode'] != 'apply':
+        print('\nplan only. Nothing written. Re-run with --apply.')
+        return 0
+    fsplan.apply(plan, os.path.join(PKG, MANIFEST.replace('/', os.sep)),
+                 backup_dir=os.path.join(PKG, BACKUP.replace('/', os.sep)))
+    print('\napplied.')
+    bad = []
+    for arch in sorted(os.listdir(os.path.join(PKG, 'archetypes'))):
+        try:
+            decl.load_archetype(PKG, arch)
+        except decl.DeclError as e:
+            bad.append('%s:\n%s' % (arch, e))
+    if bad:
+        print('\nthe package no longer loads. Roll back with:')
+        print('  py -c "import sys;sys.path.insert(0,r\'%s\');'
+              'from lib import fsplan;print(fsplan.rollback(r\'%s\'))"'
+              % (PKG, os.path.join(PKG, MANIFEST.replace('/', os.sep))))
+        for b in bad:
+            print('\n%s' % b)
+        return 1
+    print('every archetype still loads.')
+    print('\nNext, and this is the part that is not optional: regenerate the projections.')
+    print('  py %s/skills/solai-scaffold/scaffold.py "<place>" --apply' % PKG)
+    return 0
+
+
 # --------------------------------------------------------------------------- main
 
 def parse(argv):
     o = {'archetypes': [], 'returns': [], 'evals': [], 'phases': [], 'tools': [],
-         'reads': [], 'refuses': [], 'mode': 'plan'}
+         'reads': [], 'refuses': [], 'fields': [], 'links': [], 'h2s': [],
+         'optional_h2s': [], 'status_notes': [], 'mode': 'plan'}
     i, positional = 0, []
     lists = {'--returns': 'returns', '--eval': 'evals', '--phase': 'phases',
-             '--reads': 'reads', '--refuse': 'refuses'}
+             '--reads': 'reads', '--refuse': 'refuses', '--field': 'fields',
+             '--link': 'links', '--h2': 'h2s', '--optional-h2': 'optional_h2s',
+             '--status-note': 'status_notes'}
     while i < len(argv):
         a = argv[i]
         if a == '--apply':
@@ -250,6 +642,7 @@ def parse(argv):
         i += 1
     # `verb` and not `kind`: `kind` already names an agent's RETURN kind, and one word meaning
     # two things here wrote 'kind = "agent"' into a return block and was caught by the loader.
+    o['positional'] = positional
     o['verb'] = positional[0] if positional else ''
     o['name'] = positional[1] if len(positional) > 1 else ''
     return o
@@ -260,9 +653,22 @@ def main():
     kind, name = o['verb'], o['name']
     print('place %s   author %s' % (VERSION, kind or '(no verb)'))
 
-    if kind not in ('agent', 'workflow'):
-        print('  usage: author.py agent|workflow <name> ... [--apply]')
+    if kind not in ('agent', 'workflow', 'class'):
+        print('  usage: author.py agent|workflow|class <name> ... [--apply]')
         return 2
+
+    if kind == 'class':
+        pos = o['positional']
+        op = pos[1] if len(pos) > 1 else ''
+        if op not in ('add', 'rename', 'retire'):
+            print('  usage: author.py class add|rename|retire <name> ... [--apply]')
+            return 2
+        cname = pos[2] if len(pos) > 2 else ''
+        if op == 'rename':
+            return do_rename(o, cname, pos[3] if len(pos) > 3 else '')
+        if op == 'retire':
+            return do_retire(o, cname)
+        o['name'] = name = cname
     if not name or name != name.lower() or '_' in name or ' ' in name:
         print('  a name is required, lowercase kebab-case: got %r' % name)
         return 1
@@ -284,7 +690,7 @@ def main():
             if over:
                 problems.append(over)
         folder, render = 'agents', agent_toml
-    else:
+    elif kind == 'workflow':
         for req in ('goal', 'input', 'output'):
             if not o.get(req):
                 problems.append('--%s is required' % req)
@@ -296,6 +702,33 @@ def main():
             if over:
                 problems.append(over)
         folder, render = 'workflows', workflow_toml
+
+    else:
+        for req, why in (('prefix', 'the identifier prefix, uppercase letters'),
+                         ('folder', 'where its cards live'),
+                         ('purpose', 'one sentence: what one card of this class is'),
+                         ('status', 'e.g. "lifecycle=on-review,open;terminal=archived"')):
+            if not o.get(req):
+                problems.append('--%s is required: %s' % (req, why))
+        if not o['fields']:
+            problems.append('--field is required at least once. A class whose only content is a status is a checkbox, not a card: it declares a thing to track and nothing to know about it.')
+        if not o['archetypes']:
+            problems.append('--archetype is required. A class declaration lives in an archetype, never in common/: there is no common/classes and the engine does not look for one.')
+        prefix = o.get('prefix') or ''
+        if prefix and not (prefix.isupper() and prefix.isalpha()):
+            problems.append('prefix %r must be uppercase letters only.' % prefix)
+        if prefix and o['archetypes']:
+            clash = prefix_taken(prefix, o['archetypes'])
+            if clash:
+                problems.append(clash)
+        if o.get('purpose'):
+            over = job_overlap(o['purpose'], 'classes', 'purpose')
+            if over:
+                problems.append(over)
+        for arch in o['archetypes']:
+            if not os.path.exists(os.path.join(PKG, 'archetypes', arch, 'manifest.toml')):
+                problems.append('no archetype %r in this package.' % arch)
+        folder, render = 'classes', class_toml
 
     if problems:
         print('\nrefused:')
@@ -311,7 +744,8 @@ def main():
     tmp = os.path.join(tempfile.mkdtemp(prefix='solai-author-'), '%s.toml' % name)
     io.open(tmp, 'w', encoding='utf-8', newline='\n').write(body)
     try:
-        (decl.load_agent if kind == 'agent' else decl.load_workflow)(tmp)
+        {'agent': decl.load_agent, 'workflow': decl.load_workflow,
+         'class': decl.load_class}[kind](tmp)
     except decl.DeclError as e:
         print('\nrefused - the declaration this would write does not load:')
         print(e)
@@ -320,8 +754,18 @@ def main():
         return 1
 
     plan = fsplan.Plan(PKG, VERSION)
-    target = 'common/%s/%s.toml' % (folder, name)
-    plan.write(target, 'declaration', body)
+    if kind == 'class':
+        # Classes are declared inside the archetype that takes them; agents and workflows
+        # are declared once in common/ and selected by name. Writing one class into two
+        # archetypes writes the file twice, which is GAP-003 and is reported, not hidden.
+        for arch in o['archetypes']:
+            plan.write('archetypes/%s/classes/%s.toml' % (arch, name), 'declaration', body)
+        if len(o['archetypes']) > 1:
+            print('  note: %d copies of this declaration, one per archetype. They will '
+                  'drift, because nothing compares them: an archetype cannot extend '
+                  'another.' % len(o['archetypes']))
+    else:
+        plan.write('common/%s/%s.toml' % (folder, name), 'declaration', body)
 
     notes = []
     for arch in o['archetypes']:

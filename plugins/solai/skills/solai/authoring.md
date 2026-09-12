@@ -1,4 +1,4 @@
-# Authoring an agent or a workflow
+# Authoring an agent, a workflow or a card class
 
 The detail behind `/solai agent`, `/solai workflow` and `/solai check --agents`. The engine
 writes; this file says what to ask before letting it.
@@ -89,3 +89,39 @@ agent's answer, so running one needs a model call and this script makes none. Re
 it did not measure is the single dishonest move available here. If the user wants the evals run,
 that is a session sending each agent a real input and judging the return against its
 `fails_when` — a separate, explicit act, and its result belongs in a dated report.
+
+## `class add|rename|retire <name>`
+
+A class is declared inside an archetype, never in `common/`: there is no `common/classes` and
+the engine does not look for one, so `--archetype` is required on all three operations.
+
+Settle these before running `add`, because each is refused when missing rather than defaulted
+into existence:
+
+| Argument | What it decides |
+|---|---|
+| `--prefix` | the identifier prefix, uppercase letters. One prefix, one class, checked against every class in the target archetypes |
+| `--folder` | where its cards live |
+| `--purpose` | one sentence: what ONE card of this class is. Checked for overlap against every class already declared, the way an agent's job is |
+| `--status` | `lifecycle=a,b;terminal=c;default=a`. The default falls to the first lifecycle value |
+| `--field` | at least once. A class whose only content is a status is a checkbox, not a card |
+| `--link` | `field=..;target=..;kind=one-way\|bidirectional\|lateral;reciprocal=..` |
+| `--h2` | a required body heading, repeatable, in order |
+
+Two things the renderer builds rather than asks for, because the validator rejects them and a
+view is the one projection nobody reads until it is wrong: the view columns, which are
+`file.name`, `status`, every declared name, then `tags`; and a rubric for every enum, because
+an enum with no rubric is a list of words picked from by feel.
+
+**`retire` is the operation this whole verb exists for.** It refuses while anything still
+names the class and prints each hit: a sibling declaration whose link targets it, a loop step
+calling its skill, the selection list, or its prefix hardcoded in a runtime checker. It does
+not delete the generated skill or the cards already written. The engine reports the orphaned
+skill on its next run, and the cards are evidence: what happens to them is a decision with a
+change record, not a side effect of a retirement.
+
+**`rename` touches only keys that hold a name** - `class`, `skill`, `target`, `field`,
+`reciprocal`, `minted_by` - and never `meaning`, which mentions class names constantly. It
+leaves `folder` alone, and it does not migrate a vault already built: those read their own
+compiled declarations, so their cards keep the old key until each is migrated on its own
+record.

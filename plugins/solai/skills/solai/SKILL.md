@@ -120,13 +120,12 @@ link target, not an enum value, not a heading.
 
 ## STEP 5 - `class <name>`
 
-A new card class is a declaration first. Write
-`${CLAUDE_PLUGIN_ROOT}/archetypes/<archetype>/classes/<name>.toml` using an existing class
-as the model, then regenerate every projection from it. Unlike `agent` and `workflow`, this
-one has no authoring script yet: a known gap, not a preference.
+A new card class is a declaration first. Since 0.23.0 it is authored, not hand-written:
+read `${CLAUDE_PLUGIN_ROOT}/skills/solai/authoring.md` and follow it. `retire` refuses
+while anything still names the class, and says what.
 
 ```
-py ${CLAUDE_PLUGIN_ROOT}/skills/solai-scaffold/scaffold.py "<vault>" --apply
+py ${CLAUDE_PLUGIN_ROOT}/skills/solai/author.py class add|rename|retire <name> [--apply]
 ```
 
 **Refuse to create a class with no work in it.** Ask for the two or three real items that
