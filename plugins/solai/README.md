@@ -94,9 +94,13 @@ common/labels/       output-language strings, so the language question is struct
 ## Not built yet, on purpose
 
 The governed tier's org layer; `counsel` as its own skill (its assertions ship inside `check`,
-so the guard exists from day one); HTML org maps; the harvest loop that pulls a lesson from a
-live vault back into the package. Each is recorded as deferred rather than left implied,
-because an undeclared deferral is the same defect as an undeclared write.
+so the guard exists from day one); HTML org maps. Each is recorded as deferred rather than left
+implied, because an undeclared deferral is the same defect as an undeclared write.
+
+The harvest loop, which pulls a lesson from a live vault back into the package, stopped being one
+of them on 2026-09-13. It was deferred for four releases and cost a fix that lived correct in a
+vault for days while the package shipped the defect to everyone, that vault included. `R-6` now
+names what it is: a verb that reads every copied file a vault has changed and prints the diff.
 
 The `personal` and `role` archetypes were deferred at v0.1.0 and built at v0.2.0. Neither
 needed a line of `lib/` changed, which was the test they were there to run.
