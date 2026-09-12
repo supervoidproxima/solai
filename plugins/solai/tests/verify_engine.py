@@ -72,6 +72,12 @@ each projection is real JavaScript with an evaluable `meta` literal, and
 identical call sequence, then kills a run mid-way and demands the surviving prefix match. That
 is the property a resume actually depends on. A live runner cache and a real model call remain
 unexercised, and are stated as such rather than implied.
+
+Two scenarios run after the four archetypes and neither touches the counts above, because
+both mutate a vault that has already been built and measured. `evolved` retires a class from
+a `role` vault and re-applies. `upgraded` is its mirror: a `project` vault declares a class
+the package does not carry and then takes a package upgrade, which must keep it. Those two
+directions are the whole contract between a vault and the package it was built from.
 """
 import io
 import os
@@ -84,6 +90,30 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG = os.path.dirname(HERE)
 SCAFFOLD = os.path.join(PKG, 'skills', 'solai-scaffold', 'scaffold.py')
+
+# The class the `upgraded` scenario declares in a vault and nowhere else. Deliberately
+# minimal and link-free: it is standing in for `deliverable` in the vault that invented it,
+# and what is being tested is whether an upgrade keeps it, not what it says.
+ZETA = '''\
+schema = 1
+class     = "zeta"
+prefix    = "ZET"
+folder    = "registry/zeta"
+skill     = "zeta"
+title     = "Zeta"
+purpose   = "Declared by one vault and by no archetype."
+
+[status]
+lifecycle = ["open"]
+terminal  = ["closed"]
+default   = "open"
+
+[[fields]]
+name     = "title"
+type     = "scalar"
+card     = "1"
+required = true
+'''
 
 # archetype, output language, expected NOOP plan rows, agents projected, workflows projected.
 # Each agent and each workflow contributes two rows: the projection under `.claude/` and its
@@ -303,6 +333,56 @@ def main():
             checks.append('retired a class, regenerated from the vault: %s'
                           % ('ok' if ok else 'FAILED'))
             rows.append(('evolved', 'en', 'role, one class retired', '   ' + checks[0]))
+
+        # ------------------------------------------------------- the vault upgrades
+        # The other half of the same rule. `--from-package` re-imports the archetype, and
+        # used to re-import it WHOLE: a class the vault declared and the package did not was
+        # deleted along with its folder, its skill and its row in every generated index. A
+        # vault declares one class of its own here, the way a vault does - by putting the
+        # declaration in `_system/os/classes/` - and then takes a package upgrade.
+        root = os.path.join(tmp, 'project')
+        checks, ok = [], True
+        if os.path.isdir(root):
+            io.open(os.path.join(root, '_system', 'os', 'classes', 'zeta.toml'), 'w',
+                    encoding='utf-8', newline='\n').write(ZETA)
+            run([SCAFFOLD, root, '--apply'])
+
+            code, out = run([SCAFFOLD, root, '--apply', '--from-package'])
+            claude = io.open(os.path.join(root, 'CLAUDE.md'), encoding='utf-8').read()
+            index_region = claude.split('solai:begin card-index')[-1].split('solai:end')[0]
+            manifest = io.open(os.path.join(root, '_system', 'os', 'manifest.toml'),
+                               encoding='utf-8').read()
+
+            if 'kept: zeta' not in out:
+                failures.append('upgraded: the run did not report the kept class')
+                ok = False
+            if not os.path.exists(os.path.join(root, '_system', 'os', 'classes', 'zeta.toml')):
+                failures.append('upgraded: the vault-only DECLARATION was deleted by an '
+                                'upgrade. This is the whole defect')
+                ok = False
+            if 'ZET' not in index_region:
+                failures.append('upgraded: the card index dropped the vault-only class')
+                ok = False
+            if not os.path.exists(os.path.join(root, '.claude', 'skills', 'zeta', 'SKILL.md')):
+                failures.append('upgraded: the vault-only class lost its skill')
+                ok = False
+            if '"zeta"' not in manifest:
+                failures.append('upgraded: the compiled manifest does not list the kept class, '
+                                'so the next plain run reads it as drift and reorders')
+                ok = False
+            code2, out2 = run([SCAFFOLD, root, '--apply', '--from-package'])
+            if 'nothing to do' not in out2:
+                failures.append('upgraded: the upgrade is not idempotent')
+                ok = False
+            code3, out3 = run([SCAFFOLD, root, '--apply'])
+            if 'nothing to do' not in out3:
+                failures.append('upgraded: a plain run after the upgrade is not a NOOP, so the '
+                                'merged manifest and the compiled declarations disagree')
+                ok = False
+            checks.append('kept a vault-only class through an upgrade: %s'
+                          % ('ok' if ok else 'FAILED'))
+            rows.append(('upgraded', 'en', 'project, one class the package lacks',
+                         '   ' + checks[0]))
 
         print('')
         for arch, lang, verdict, detail in rows:

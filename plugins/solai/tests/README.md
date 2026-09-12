@@ -18,16 +18,21 @@ Each exits 0 only when green, so any of them can gate a commit.
 |---|---:|---|
 | `test_primitives.py` | 62 | `fm` 14, `stamp` 11, `regions` 13, `fsplan` 8, materials 6, language 6, START-HERE 4 |
 | `test_decl.py` | 61 | 27 on one class, 31 on an archetype set, 3 on the card-skill emitter |
-| `test_compiled.py` | 14 | 7 on loading a vault's own declarations, 7 on the fate of a hand edit |
+| `test_compiled.py` | 21 | 7 on loading a vault's own declarations, 7 on the fate of a hand edit, 7 on the upgrade merge |
 | `test_agents.py` | 34 | 22 on an agent declaration, 12 on the agent emitter |
 | `test_workflows.py` | 34 | 22 on a workflow declaration, 12 on the workflow emitter |
-| `test_authoring.py` | 16 | the renderers, the manifest wiring, the refusals |
-| `test_ui.py` | 45 | 9 declarations, 6 the gate, 4 argv, 5 tier, 21 the page |
-| **total** | **266** | |
+| `test_authoring.py` | 35 | the renderers, the manifest wiring, the refusals, `class add\|rename\|retire` |
+| `test_ui.py` | 55 | 9 declarations, 6 the gate, 4 argv, 5 tier, 31 the page |
+| `test_sensitive.py` | 11 | what `check_sensitive.py` finds, and what it refuses to print |
+| `test_change.py` | 7 | claiming a change number, including sixteen threads racing for one |
+| `test_release.py` | 6 | the order of a release, and each refusal naming itself |
+| **total** | **326** | |
 
 This table was stale on 2026-09-03 - it named 178 against a suite of 241, omitted `test_ui.py`
-entirely, and understated `test_primitives.py` by 17. The counts above were read off the
-harness rather than copied forward, which is the only way a count in prose stays true.
+entirely, and understated `test_primitives.py` by 17. It was stale again on 2026-09-12, at 266
+against 326, missing three whole modules. The counts above were read off the harness rather
+than copied forward, which is the only way a count in prose stays true - and twice now the
+reading has been done only because something else brought a hand to this file.
 
 Every assertion carries a stable id, and the runner **refuses a run whose assertion count does
 not match the declared expectation** - a deleted assertion is a silently weakened gate,
@@ -42,6 +47,12 @@ The `evolved` case in `verify_engine.py` earned its place the same way: forcing 
 back into package mode turned four of its assertions red at once - the run no longer read the
 compiled declarations, the card index still named the retired class, the dictionary still
 carried its schema, and the orphaned skill went unreported.
+
+The `upgraded` case earned its place on its first run, against code the unit suite had just
+passed 326/326. The merge kept the vault-only class and wrote a truthful manifest, and then
+the plain run after it rewrote every generated region: the source hash named the package
+manifest while the vault held the widened one. Only an end-to-end scenario could see that,
+because the defect lives in the relationship between two runs.
 
 ### Mutation-tested, not assumed
 

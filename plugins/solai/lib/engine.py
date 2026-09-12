@@ -243,6 +243,11 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
     def wanted(aid):
         return (not only) or aid in only
 
+    manifest_path = os.path.join(arch.root, 'manifest.toml')
+    manifest_body = arch.manifest_text
+    if manifest_body is None and os.path.exists(manifest_path):
+        manifest_body = io.open(manifest_path, encoding='utf-8').read()
+
     src_inputs = [(os.path.basename(c.path), stamp.file_sha(c.path)) for c in classes]
     # An agent declaration is a source like a class declaration: editing one must make the
     # projections read STALE, and leaving it out of the hash is how a stamp starts lying.
@@ -250,7 +255,13 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
                    for a in arch.agents]
     src_inputs += [('workflow:' + os.path.basename(w.path), stamp.file_sha(w.path))
                    for w in arch.workflows]
-    src_inputs.append(('manifest', stamp.file_sha(os.path.join(arch.root, 'manifest.toml'))))
+    # The manifest hashed here is the one this plan WRITES, which under a merge is not the
+    # file sitting at `arch.root`: the class list has been widened to name what the vault
+    # kept. Hashing the package copy instead would stamp every region against a manifest the
+    # vault does not hold, and the next plain run would read its own manifest as a changed
+    # source and rewrite all of them.
+    src_inputs.append(('manifest', stamp.sha(manifest_body) if manifest_body is not None
+                       else None))
     src_inputs.append(('lang', answers.get('output_language', 'en')))
     src_inputs.append(('tier', tier))
 
@@ -327,9 +338,15 @@ def build_plan(root, pkg_root, answers, arch, result, only=None, force=(), mater
     #
     # Hardcoded here rather than declared as an artefact, because the three declaration
     # copies above have no artefact entry either and the precedent should not fork.
-    if os.path.exists(os.path.join(arch.root, 'manifest.toml')):
+    #
+    # `arch.manifest_text` is set only by a merge load, where the body written is the package
+    # manifest with its class list widened to name the declarations the vault kept. Copying
+    # the package file there instead would leave a compiled manifest that does not list what
+    # is in the directory beside it, and the next run would read those classes as strays and
+    # reorder every generated index around them.
+    if manifest_body is not None:
         target = OS_DIR + '/manifest.toml'
-        body = io.open(os.path.join(arch.root, 'manifest.toml'), encoding='utf-8').read()
+        body = manifest_body
         cur = fsplan.read(plan.path(target))
         if cur == body:
             plan.noop(target, 'declarations')

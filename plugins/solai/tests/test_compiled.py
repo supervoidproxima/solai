@@ -18,6 +18,13 @@ RECONCILED, is the one worth reading: a block whose content the declaration has 
 up with gets its stamp corrected rather than staying dirty forever. That is NOT the act
 `lib/stamp.py` forbids - rewriting a hash to silence a mismatch with unknown content - and
 the distinction is the whole reason the rule is safe.
+
+`CP-15` through `CP-21` are the upgrade path. `--from-package` re-imported the archetype
+whole, which deleted any class the vault declared and the package did not - `deliverable` in
+the vault that invented it, `platform` and `subject` in the counselor. CP-15 and CP-17 are
+the two halves of the rule: vault-only is kept, declared-by-both goes to the package. CP-19
+is the one that would otherwise rot quietly, because a merged manifest that does not list
+what sits beside it reads as drift on the very next run and reorders every generated index.
 """
 import os
 import shutil
@@ -25,7 +32,7 @@ import tempfile
 
 from lib import decl, engine, regions, stamp
 
-EXPECTED = 14
+EXPECTED = 21
 NAME = 'compiled'
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -192,4 +199,74 @@ def group_compiled(s):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-GROUPS = (group_compiled,)
+PROJ = os.path.join(PKG_ROOT, 'archetypes', 'project', 'manifest.toml')
+ZETA = (CLASS.replace('"alpha"', '"zeta"').replace('"ALP"', '"ZET"')
+             .replace('"Alpha"', '"Zeta"').replace('cards/alpha', 'registry/zeta'))
+
+
+def group_merge(s):
+    """`--from-package` on a vault that declares a class the archetype does not carry."""
+    tmp = tempfile.mkdtemp(prefix='solai-test-mg-')
+    try:
+        proj = decl._read_text(PROJ)
+        gap = decl._read_text(os.path.join(PKG_ROOT, 'archetypes', 'project',
+                                           'classes', 'gap.toml'))
+
+        # A vault carrying one class of its own and nothing else. What the package declares
+        # is not compiled in here, which is the shape of every real upgrade: the vault holds
+        # judgement, the package holds the declarations it ships.
+        root = _vault(tmp, manifest=decl._relist(proj, 'classes', ['zeta']),
+                      classes={'zeta': ZETA})
+        arch, notes = decl.load_merged(PKG_ROOT, root, 'project')
+        names = [c.name for c in arch.classes]
+        s.ok('CP-15', 'a class the vault declares alone survives the upgrade',
+             'zeta' in names and 'gap' in names and arch.kept == ['zeta'], repr(names))
+
+        s.ok('CP-16', 'the kept class is named in a note, so the plan says why the row is there',
+             any('zeta' in n and 'Kept' in n for n in notes), repr(notes))
+
+        s.ok('CP-17', 'a class declared by both resolves to the PACKAGE file',
+             os.path.abspath(arch.classes[names.index('gap')].path).startswith(
+                 os.path.abspath(os.path.join(PKG_ROOT, 'archetypes'))),
+             arch.classes[names.index('gap')].path)
+
+        # Byte-identical on both sides. Silence is the point: a note on every unchanged
+        # class buries the one row that is actually being overwritten.
+        root = _vault(tmp, manifest=decl._relist(proj, 'classes', ['gap', 'zeta']),
+                      classes={'gap': gap, 'zeta': ZETA})
+        arch, quiet = decl.load_merged(PKG_ROOT, root, 'project')
+        root = _vault(tmp, manifest=decl._relist(proj, 'classes', ['gap', 'zeta']),
+                      classes={'gap': gap.replace('schema = 1', 'schema = 1\n# edited here'),
+                               'zeta': ZETA})
+        arch2, loud = decl.load_merged(PKG_ROOT, root, 'project')
+        s.ok('CP-18', 'an identical duplicate is silent and a differing one is reported',
+             not any('gap' in n for n in quiet)
+             and any('gap' in n and 'differ' in n for n in loud), repr((quiet, loud)))
+
+        # The merged manifest, written back into a vault, must not read as drift.
+        _write(os.path.join(root, '_system', 'os', 'manifest.toml'), arch2.manifest_text)
+        for c in arch2.classes:
+            _write(os.path.join(root, '_system', 'os', 'classes', '%s.toml' % c.name),
+                   decl._read_text(c.path))
+        back, back_notes = decl.load_compiled(root)
+        s.ok('CP-19', 'the merged manifest lists the kept class, so the next run sees no drift',
+             [c.name for c in back.classes] == [c.name for c in arch2.classes]
+             and not any('zeta' in n for n in back_notes),
+             repr(([c.name for c in back.classes], back_notes)))
+
+        # A vault with nothing compiled in yet. Merging has nothing to merge WITH.
+        bare = tempfile.mkdtemp(dir=tmp)
+        arch3, none = decl.load_merged(PKG_ROOT, bare, 'project')
+        s.eq('CP-20', 'a vault with no compiled manifest merges to the archetype whole',
+             (arch3.kept, none, arch3.manifest_text), ([], [], None))
+
+        s.raises('CP-21', 'a class list the merge cannot rewrite is refused, never guessed at',
+                 lambda: decl._relist(proj.replace(
+                     'classes = ["gap", "resolution", "pain", "proposal", "question"]',
+                     'classes = [\n  "gap",\n]'), 'classes', ['gap']),
+                 'single-line array', exc=decl.DeclError)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+GROUPS = (group_compiled, group_merge)

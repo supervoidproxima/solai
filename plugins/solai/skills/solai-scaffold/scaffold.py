@@ -27,6 +27,11 @@ the live ones. That is the exact catastrophe this exists to prevent, performed b
 Emitters and fragments are code and always come from the package; only DECLARATIONS become
 vault-local. So an emitter fix reaches every vault on a plain `--apply`, and only a
 declaration change needs `--from-package`.
+
+`--from-package` MERGES, it does not replace. The package wins wherever both declare the
+same class, and a class this vault declares alone is kept with its folder, its skill and its
+place in the manifest. Replacing whole was the first behaviour and it deleted `deliverable`
+from the vault that invented it. The rules and the reasoning are in `decl.load_merged`.
 """
 import os
 import sys
@@ -223,12 +228,17 @@ def main():
         if built_before and not o['from_package'] and os.path.exists(compiled):
             arch, notes = decl.load_compiled(root)
             print('  declarations: this vault  (_system/os)')
+        elif o['from_package'] and built_before:
+            # An upgrade MERGES rather than replaces. The package wins everywhere the two
+            # declare the same thing, and a class this vault declares alone is kept, because
+            # re-importing whole used to delete it along with its folder and its skill.
+            arch, notes = decl.load_merged(PKG, root, archetype)
+            print('  declarations: package  (archetypes/%s), re-imported on request; %d '
+                  'declared only by this vault, kept: %s'
+                  % (archetype, len(arch.kept), ', '.join(arch.kept) or 'none'))
         else:
             arch = decl.load_archetype(PKG, archetype)
-            if o['from_package'] and built_before:
-                print('  declarations: package  (archetypes/%s), re-imported on request'
-                      % archetype)
-            elif built_before:
+            if built_before:
                 print('  declarations: package  (archetypes/%s), and this vault has no '
                       'compiled manifest yet. This plan writes one; the run after this '
                       'reads the compiled copy.' % archetype)

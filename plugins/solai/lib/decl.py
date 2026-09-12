@@ -71,6 +71,17 @@ def _read(path):
         return tomllib.load(fh)
 
 
+def _read_text(path):
+    """The same file as text, newlines normalised. `tomllib` is read-only by design, so a
+    manifest that has to be written back out with its comments intact is handled as text.
+
+    The normalisation is not cosmetic: `stamp.file_sha` reads through Python's text mode and
+    therefore hashes `\\n`, so text read any other way would hash differently from the same
+    file on disk and every generated region would read STALE for no visible reason."""
+    with open(path, 'rb') as fh:
+        return fh.read().decode('utf-8').replace('\r\n', '\n').replace('\r', '\n')
+
+
 # --------------------------------------------------------------------------- classes
 
 class Field(object):
@@ -630,6 +641,14 @@ class Archetype(object):
         self.lookups = []
         self.agents = []
         self.workflows = []
+        # Set by `load_merged` and by nothing else. `kept` names the declarations this
+        # archetype does not carry and the vault being upgraded does, so the plan table can
+        # say which rows are present because the vault already had them. `manifest_text` is
+        # the compiled manifest body the engine should write, which under a merge is not the
+        # package file byte for byte: it has to list the kept names or the next compiled
+        # load reads them as strays and reorders every generated index around them.
+        self.kept = []
+        self.manifest_text = None
 
     def agent(self, name):
         for a in self.agents:
@@ -716,10 +735,14 @@ def load_archetype(pkg_root, name):
     return arch
 
 
-def load_compiled(vault_root):
-    """Load an archetype from a vault's OWN compiled declarations, not from the package.
+def _compiled(vault_root):
+    """A vault's own declarations, read and each one validated, but NOT checked as a set.
 
-    -> (archetype, notes). Raises DeclError with every reason, like `load_archetype`.
+    -> (archetype, notes, errors). The set check is the caller's because the two callers
+    check DIFFERENT sets: `load_compiled` validates the vault's declarations as the whole
+    they are, and `load_merged` validates the merged set, where a link this vault's copy
+    makes is satisfied by the package's class. Running the set check here would refuse an
+    upgrade on account of a state the upgrade resolves.
 
     WHY THIS EXISTS. `validate_cards.py` has always read `_system/os/classes/*.toml` at
     runtime, so a vault that renames a class is still validated correctly. The emitters read
@@ -792,11 +815,118 @@ def load_compiled(vault_root):
                           arch.agent_names)
     arch.workflows = ordered(discover('workflows', Workflow, _validate_workflow,
                                       arch.workflow_names), arch.workflow_names)
+    return arch, notes, errors
 
+
+def load_compiled(vault_root):
+    """Load an archetype from a vault's OWN compiled declarations, not from the package.
+
+    -> (archetype, notes). Raises DeclError with every reason, like `load_archetype`.
+    The reading and the reasoning are in `_compiled`; this adds the set check.
+    """
+    arch, notes, errors = _compiled(vault_root)
     _validate_set(arch, errors)
     if errors:
         raise DeclError(errors)
     return arch, notes
+
+
+def _relist(body, key, names):
+    """Rewrite the single top-level `key = [...]` line of a manifest, comments intact.
+
+    Returns the new body, or raises DeclError naming what it could not find. It refuses
+    rather than guessing: a manifest whose class list silently failed to update is the
+    stale-list defect `load_compiled` was written to end, arriving by another door.
+    """
+    out, hits = [], []
+    for i, line in enumerate(body.split('\n')):
+        head, eq, rest = line.partition('=')
+        if not eq or head.strip() != key or head[:1].isspace():
+            out.append(line)
+            continue
+        if rest.count('[') != 1 or ']' not in rest:
+            raise DeclError(['manifest.toml line %d: `%s` is not a single-line array, so the '
+                             'merged list cannot be written back without guessing at the '
+                             'shape. Put the array on one line.' % (i + 1, key)])
+        hits.append(i)
+        out.append('%s= [%s]' % (head, ', '.join('"%s"' % n for n in names)))
+    if len(hits) != 1:
+        raise DeclError(['manifest.toml: expected exactly one top-level `%s = [...]` line and '
+                         'found %d. The merged declaration set cannot be recorded.'
+                         % (key, len(hits))])
+    return '\n'.join(out)
+
+
+def load_merged(pkg_root, vault_root, name):
+    """Upgrade load: the package archetype, PLUS the classes this vault has and it does not.
+
+    -> (archetype, notes). Raises DeclError with every reason, like its two siblings.
+
+    WHY THIS EXISTS. `--from-package` re-imported the archetype whole, which is right for
+    artefacts, runtime, agents and workflows and wrong for classes. A class declared in one
+    vault and deliberately not written back into the archetype - this vault's `deliverable`,
+    the counselor's `platform` and `subject` - vanished on upgrade, taking its folder, its
+    skill, its view and its row in every generated index with it. An upgrade that deletes a
+    class the vault is using is not an upgrade, and D19 says nothing is deleted by a script.
+
+    THE THREE CASES. Only the third is a judgement:
+
+      package only  -> taken. This is what upgrading means.
+      vault only    -> KEPT. Nobody asked for it to go, and the vault is using it.
+      both          -> the PACKAGE wins, and the note says so by name, because an upgrade
+                       whose declarations lose to the copy already on disk upgrades nothing.
+                       A vault that wants to keep its own version of a class the package has
+                       since adopted renames it first; that is what `class rename` is for.
+
+    A kept class keeps its OWN path, inside `_system/os/classes/`, so the engine plans a
+    write of the file over itself and the row reads NOOP. The merged manifest is rendered
+    here rather than copied, because the package manifest does not list the kept names and a
+    compiled manifest that does not list what is beside it is the drift this loader reports.
+    """
+    pkg = load_archetype(pkg_root, name)
+    compiled = os.path.join(vault_root, '_system', 'os', 'manifest.toml')
+    if not os.path.exists(compiled):
+        # Nothing to merge with: a first build, or a vault older than the compiled manifest.
+        # Both are the package archetype whole, which is what `load_archetype` already gives.
+        return pkg, []
+
+    local, notes, errors = _compiled(vault_root)
+    if errors:
+        raise DeclError(errors)
+    have = set(c.name for c in pkg.classes) | set(c.name for c in pkg.lookups)
+    class_names, lookup_names = list(pkg.class_names), list(pkg.lookup_names)
+    by_name = dict((d.name, d) for d in pkg.classes + pkg.lookups)
+    for c in local.classes + local.lookups:
+        if c.name in have:
+            # Reported only where the two files actually differ. A note on all five of an
+            # unchanged set buries the one row that matters, and "is overwritten" is not
+            # true of a byte-identical file: the engine plans that row as a NOOP.
+            if _read_text(c.path) != _read_text(by_name[c.name].path):
+                notes.append('classes: %r is declared by both and the two differ. The package '
+                             'declaration wins; this vault\'s copy is overwritten.' % c.name)
+            continue
+        if c.name in local.lookup_names:
+            pkg.lookups.append(c)
+            lookup_names.append(c.name)
+        else:
+            pkg.classes.append(c)
+            class_names.append(c.name)
+        pkg.kept.append(c.name)
+        notes.append('classes: %r is declared by this vault and not by the %s archetype. '
+                     'Kept.' % (c.name, name))
+
+    if pkg.kept:
+        body = _read_text(os.path.join(pkg.root, 'manifest.toml'))
+        body = _relist(body, 'classes', class_names)
+        body = _relist(body, 'lookups', lookup_names)
+        pkg.manifest_text = body
+        pkg.class_names, pkg.lookup_names = class_names, lookup_names
+
+    errors = []
+    _validate_set(pkg, errors)
+    if errors:
+        raise DeclError(errors)
+    return pkg, notes
 
 
 def _validate_set(arch, errors):
