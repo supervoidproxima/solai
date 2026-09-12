@@ -167,8 +167,16 @@ def group_bare(s):
              'Exception' not in out and 'ParserError' not in out, out[-400:])
         s.ok('IN-10', 'a bare machine is told what it is missing, by name',
              'missing' in out.lower() or 'not on PATH' in out, out[-400:])
-        s.ok('IN-11', 'no winget is a named stop rather than a stack trace',
-             'winget' in out and 'App Installer' in out,
+        # The contract changed under this assertion and the assertion did not follow. winget
+        # ships with App Installer, so it can be installed and unreachable at once; stage 0 now
+        # recovers it from the app-execution-alias directory instead of stopping to say it is
+        # missing, and the stop fires only on a machine that genuinely does not have it. What
+        # is still gated is that the outcome is NAMED either way, never a stack trace: the
+        # directory it was recovered from, or App Installer as the thing to go and install.
+        named = ('winget found at', 'winget was installed but not on PATH',
+                 'would put winget on your PATH', 'App Installer')
+        s.ok('IN-11', 'winget is either recovered by name or named as the one stop',
+             'winget' in out and any(n in out for n in named),
              'the one dependency the script cannot install for you')
         s.eq('IN-12', 'a dry run writes nothing into the profile it inspects',
              tree(root), before)

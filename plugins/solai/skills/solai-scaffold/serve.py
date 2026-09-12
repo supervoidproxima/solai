@@ -5,7 +5,7 @@ One name for the whole thing: Solai is the engine, the command and this page. It
 «just so» in Kazakh - what you call the answer when what was declared and what was built
 turn out to be the same, which is what every gate here spends its run establishing.
 
-    py serve.py [--port 0] [--vaults "<folder new vaults go under>"] [--no-browser]
+    py serve.py [--port 0] [--vaults "<folder new vaults go under>"] [--no-browser] [--once]
 
 Why a server and not a page. A file opened from disk cannot create a directory, and a page
 published to the web cannot touch this machine at all. The only honest way for a button
@@ -29,6 +29,8 @@ import os
 import subprocess
 import sys
 import threading
+import time
+import urllib.parse
 import webbrowser
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -46,6 +48,17 @@ from lib import VERSION, decl, engine, fsplan                       # noqa: E402
 SCAFFOLD = os.path.join(HERE, 'scaffold.py')
 PICK = os.path.join(HERE, 'pick.py')
 UI = os.path.join(HERE, 'ui.html')
+
+# The browser asks for /favicon.ico whether or not anything serves one, and a 404 in the log of
+# a five-minute setup process reads like a fault when it is a tab icon. Serve the mark instead:
+# the page links to this route, so the icon and the log line have one source.
+FAVICON = (
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+    "<rect width='32' height='32' rx='7' fill='#14161a'/>"
+    "<circle cx='16' cy='13' r='5.5' fill='#e0b46c'/>"
+    "<path d='M16 20v6' stroke='#e0b46c' stroke-width='3' stroke-linecap='round'/>"
+    "</svg>"
+)
 
 # The tier table of `skills/solai/interview.md`, in the one form a page can render. Kept as
 # data rather than prose because the page has to grey out what the counts do not support,
@@ -251,6 +264,134 @@ def material_paths(materials):
     return [p.strip() for p in (materials or '').splitlines() if p.strip()]
 
 
+# ------------------------------------------------------------------------------- Obsidian
+
+# Obsidian keeps its vault list in one file, %APPDATA%\obsidian\obsidian.json, and offers no
+# command that adds to it: the obsidian:// URI opens a vault the app already knows and does
+# nothing for a folder it does not, and the desktop binary takes a URI rather than a path. So
+# opening a vault that was created a minute ago means writing the entry the app would have
+# written, then asking the app to open it.
+REGISTRY = os.path.join(os.environ.get('APPDATA') or os.path.expanduser('~'),
+                        'obsidian', 'obsidian.json')
+
+
+def obsidian_vaults(registry=None):
+    """The vault list as {id: entry}. A missing file, an unreadable one and one holding some
+    other shape all mean the same thing here - Obsidian has nothing to say about this machine
+    yet - so they answer alike rather than raising."""
+    try:
+        with open(registry or REGISTRY, 'r', encoding='utf-8') as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    vaults = data.get('vaults') if isinstance(data, dict) else None
+    return vaults if isinstance(vaults, dict) else {}
+
+
+def obsidian_id(root, registry=None):
+    """The id Obsidian already holds for this folder, or None. Compared the way the filesystem
+    compares - case folded, separators normalised - because the registry holds whatever was
+    typed the day the vault was added, and a OneDrive path gets retyped."""
+    want = os.path.normcase(os.path.normpath(os.path.abspath(root)))
+    for vid, entry in obsidian_vaults(registry).items():
+        have = entry.get('path') if isinstance(entry, dict) else None
+        if have and os.path.normcase(os.path.normpath(os.path.abspath(have))) == want:
+            return vid
+    return None
+
+
+def obsidian_running():
+    """Whether the app is up, because it rewrites its vault list from memory when it closes.
+    An entry added behind a running instance is an entry that may be thrown away an hour
+    later, and a button that loses its work quietly is worse than one that says it cannot."""
+    try:
+        out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq Obsidian.exe', '/NH'],
+                             capture_output=True, text=True,
+                             encoding='utf-8', errors='replace').stdout
+    except OSError:
+        return False
+    return 'Obsidian.exe' in (out or '')
+
+
+def obsidian_register(root, registry=None):
+    """Add the folder to the vault list once. Returns (id, added), where added is false when
+    the folder was already listed, so a second press is not a second entry for one vault.
+
+    Written beside itself and moved into place: a failure halfway leaves the list Obsidian had
+    rather than half a list, which is the one outcome this cannot risk."""
+    path = registry or REGISTRY
+    known = obsidian_id(root, path)
+    if known:
+        return known, False
+    try:
+        with open(path, 'r', encoding='utf-8') as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    vaults = data.get('vaults')
+    if not isinstance(vaults, dict):
+        vaults = {}
+        data['vaults'] = vaults
+    vid = os.urandom(8).hex()
+    while vid in vaults:
+        vid = os.urandom(8).hex()
+    vaults[vid] = {'path': os.path.abspath(root), 'ts': int(time.time() * 1000)}
+    folder = os.path.dirname(os.path.abspath(path))
+    if folder and not os.path.isdir(folder):
+        os.makedirs(folder)
+    temp = path + '.solai'
+    with open(temp, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    os.replace(temp, path)
+    return vid, True
+
+
+def obsidian_uri(root):
+    """Keyed on path rather than name: the name is whatever the folder is called, two vaults on
+    one machine can share it, and the path is what the registry is keyed on."""
+    return 'obsidian://open?path=' + urllib.parse.quote(os.path.abspath(root), safe='')
+
+
+def open_obsidian(root):
+    """Hand the URI to the machine and let it start or reuse the app. os.startfile is the
+    Windows way and takes no shell; the fallback keeps this module importable, and testable,
+    where that call does not exist."""
+    uri = obsidian_uri(root)
+    starter = getattr(os, 'startfile', None)
+    if starter:
+        starter(uri)
+    else:
+        subprocess.Popen(['cmd', '/c', 'start', '', uri], close_fds=True)
+    return uri
+
+
+def obsidian_ready(root, registry=None, running=None):
+    """Whether the app can be asked to open this folder, and what to say when it cannot.
+
+    One answer for both buttons, because the question is the same one twice: a vault the app
+    already lists is ready; an unlisted folder is registered first; and an unlisted folder
+    behind a running instance is refused, because the app rewrites that list from memory when
+    it closes and would drop the entry, and a URI it does not know puts a dialog in front of
+    the person instead of a window.
+    """
+    if obsidian_id(root, registry):
+        return True, None
+    if running is None:
+        running = obsidian_running()
+    if running:
+        return False, ('Obsidian is open, and it rewrites its vault list when it closes, so '
+                       'this did not touch the list. In Obsidian: Open folder as vault, and '
+                       'pick %s. After that it opens on its own.' % os.path.abspath(root))
+    try:
+        obsidian_register(root, registry)
+    except OSError as err:
+        return False, ('the vault list could not be written (%s). In Obsidian: Open folder as '
+                       'vault, and pick %s.' % (err, os.path.abspath(root)))
+    return True, None
+
+
 # The first thing said in a new vault. A terminal opened at a blank prompt asks the person
 # to know what to type, which is the one thing they cannot know a minute after pressing
 # create. It orients and stops: nothing is written until they say so.
@@ -261,7 +402,7 @@ FIRST_PROMPT = (
 )
 
 
-def start_argv(root, prompt=FIRST_PROMPT):
+def start_argv(root, prompt=FIRST_PROMPT, obsidian=False):
     """The command that opens a session in a vault, as a list rather than a string.
 
     PowerShell because that is the shell on this machine, `-NoExit` so the window survives
@@ -269,11 +410,19 @@ def start_argv(root, prompt=FIRST_PROMPT):
     Cyrillic and the occasional bracket, and `cd` with a bare path eventually meets one it
     reads as a pattern. The prompt is passed to `claude` as its opening message, so the
     session starts with something on the screen rather than a cursor.
+
+    `obsidian` puts the app in front of the terminal, first in the line so the vault is on
+    screen while the session is still starting. The caller decides, because whether the URI
+    can work is a fact about Obsidian's vault list rather than about this command, and a
+    Start-Process for a vault the app does not list would raise a dialog instead of a window.
     """
     root = os.path.abspath(root)
-    return ['powershell', '-NoExit', '-NoLogo', '-Command',
-            'Set-Location -LiteralPath %s; claude %s'
-            % (_ps_quote(root), _ps_quote(prompt))]
+    steps = []
+    if obsidian:
+        steps.append('Start-Process %s' % _ps_quote(obsidian_uri(root)))
+    steps.append('Set-Location -LiteralPath %s' % _ps_quote(root))
+    steps.append('claude %s' % _ps_quote(prompt))
+    return ['powershell', '-NoExit', '-NoLogo', '-Command', '; '.join(steps)]
 
 
 def _ps_quote(text):
@@ -347,6 +496,9 @@ class Handler(BaseHTTPRequestHandler):
     key = ''
     base = ''
     gate = PlanGate()
+    # Set by --once: the surface exists to get one session started, and holding a server, a
+    # terminal and a browser tab open behind that session is three things to close by hand.
+    once = False
 
     def log_message(self, fmt, *args):                              # quieter than the default
         sys.stderr.write('  %s\n' % (fmt % args))
@@ -377,6 +529,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         route = self.path.split('?')[0]
+        if route == '/favicon.ico':
+            # No key: it is a tab icon, the same bytes for anyone who can reach the loopback
+            # port, and gating it would only turn the 404 into a 403.
+            return self._send(200, FAVICON, 'image/svg+xml; charset=utf-8')
         if route == '/dashboard':
             # Chrome refuses to follow a file:// link from an http:// page, silently, which is
             # why the button did nothing. The dashboard is a file on this machine and this is
@@ -431,9 +587,35 @@ class Handler(BaseHTTPRequestHandler):
             here = os.path.abspath(root)
             if not fsplan.exists(here):
                 return 400, {'error': 'no such folder: %s' % here}
+            ready, note = obsidian_ready(here)
             flags = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0)
-            subprocess.Popen(start_argv(here), creationflags=flags, close_fds=True)
-            return 200, {'started': True, 'root': here}
+            subprocess.Popen(start_argv(here, obsidian=ready), creationflags=flags,
+                             close_fds=True)
+            answer = {'started': True, 'root': here, 'obsidian': ready}
+            if note:
+                answer['note'] = note
+            if Handler.once:
+                # Shut down after this reply rather than during it, so the page is told what
+                # happened by the process that is about to stop rather than by a dropped
+                # connection it would have to guess about.
+                answer['stopped'] = True
+                server = getattr(self, 'server', None)
+                if server is not None:
+                    threading.Timer(0.5, server.shutdown).start()
+            return 200, answer
+
+        if route == '/api/obsidian':
+            # A button of its own rather than a second thing the session button does, because
+            # these two fail apart: Obsidian can be absent or mid-update while the terminal is
+            # fine, and one press losing both would be this surface's fault, not the machine's.
+            here = os.path.abspath(root)
+            if not fsplan.exists(here):
+                return 400, {'error': 'no such folder: %s' % here}
+            ready, note = obsidian_ready(here)
+            if not ready:
+                return 200, {'opened': False, 'note': note}
+            open_obsidian(here)
+            return 200, {'opened': True, 'root': here}
 
         if route == '/api/pick':
             # The dialog belongs to this machine, not to the page: a browser hands a page
@@ -502,11 +684,12 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
 
-def serve(port=0, open_browser=True, base=''):
+def serve(port=0, open_browser=True, base='', once=False):
     key = hashlib.sha256(os.urandom(32)).hexdigest()[:20]
     Handler.key = key
     Handler.base = default_base(base)
     Handler.gate = PlanGate()
+    Handler.once = once
     # Threading, because one request can now be a dialog waiting on a person. On a single
     # thread that dialog would hold the only one answering the page, and the page would
     # look dead while the window it opened sat in front of the operator.
@@ -515,11 +698,15 @@ def serve(port=0, open_browser=True, base=''):
     print('Solai   setup surface %s' % VERSION)
     print('  %s' % url)
     print('  new vaults suggested under %s' % Handler.base)
-    print('  loopback only, one key per process. Ctrl-C to stop.')
+    if once:
+        print('  stops once a session starts, so this terminal is not held open. Ctrl-C also stops.')
+    else:
+        print('  loopback only, one key per process. Ctrl-C to stop.')
     if open_browser:
         threading.Timer(0.4, webbrowser.open, args=(url,)).start()
     try:
         httpd.serve_forever()
+        print('  the session has it from here. Surface stopped.')
     except KeyboardInterrupt:
         print('\n  stopped.')
     return 0
@@ -533,7 +720,8 @@ def main():
         port = int(argv[argv.index('--port') + 1])
     if '--vaults' in argv:
         base = argv[argv.index('--vaults') + 1]
-    return serve(port=port, open_browser='--no-browser' not in argv, base=base)
+    return serve(port=port, open_browser='--no-browser' not in argv, base=base,
+                 once='--once' in argv)
 
 
 if __name__ == '__main__':

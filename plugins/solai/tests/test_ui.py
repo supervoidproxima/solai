@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""26 assertions on the setup surface: what it asks, what it offers, what it forwards,
+"""36 assertions on the setup surface: what it asks, what it offers, what it forwards,
 and the plan gate.
 
 The surface is the one part of the package a person drives with a mouse, and a mouse cannot
@@ -15,6 +15,7 @@ controls, and a statement that quietly reached the command line would be a contr
 could see, and `UI-24` guards the types: this surface offers `role` today, and the ones it
 does not offer are shown disabled with the reason rather than dropped from the page.
 """
+import json
 import os
 import sys
 import tempfile
@@ -26,7 +27,7 @@ sys.path.insert(0, os.path.join(PKG, 'skills', 'solai-scaffold'))
 from lib import decl                                                # noqa: E402
 import serve as UI                                                  # noqa: E402
 
-EXPECTED = 45
+EXPECTED = 55
 NAME = 'ui'
 
 ANS = {'name': 'T', 'remit': 'A fixture remit', 'output_language': 'en'}
@@ -159,12 +160,18 @@ def group_page(s):
     page = UI.render_page(PKG, key='k')
     s.ok('UI-41', 'the rail has one entry per step, numbered in order, and each has a section',
          all(('data-step="%d"' % n) in page and ('id="s%d"' % n) in page
-             for n in range(1, 7)) and 'data-step="7"' not in page,
+             for n in range(1, 10)) and 'data-step="10"' not in page,
          'renumbering the steps and forgetting the rail is the obvious way to break this')
 
     s.ok('UI-43', 'every rail step is reachable without a mouse',
-         all(('data-step="%d" tabindex="0" role="button"' % n) in page for n in range(1, 7)),
+         all(('data-step="%d" tabindex="0" role="button"' % n) in page for n in range(1, 10)),
          'the rail scrolls the page, so it is a control and has to answer a keyboard')
+
+    s.ok('UI-55', 'the answer the tier turns on is asked, not filled in behind the reader',
+         'id="f-artefact"' in page and 'first_artefact' in page
+         and page.index('id="f-artefact"') < page.index('id="f-tier"'),
+         'the surface shipped the archetype default as if a person had promised it, and the '
+         'engine can only tell them apart by what arrives')
 
     s.ok('UI-44', 'the types it does not build have a region of their own',
          'id="types-off"' in page and 'id="types-off-wrap"' in page
@@ -214,4 +221,72 @@ def group_page(s):
          repr(with_mats))
 
 
-GROUPS = (group_declarations, group_gate, group_argv, group_tier, group_page)
+def group_obsidian(s):
+    """Opening the vault in the app. Obsidian registers vaults in a file and has no command
+    that adds to it, so this is the one place the surface writes outside a vault, and these
+    four assertions are what keep that write honest: it matches an existing entry before
+    adding, it adds one entry rather than one per press, and the URI survives a path with
+    spaces in it."""
+    listed = os.path.join(tempfile.mkdtemp(), 'obsidian.json')
+    vault = tempfile.mkdtemp()
+    with open(listed, 'w', encoding='utf-8') as fh:
+        json.dump({'vaults': {'a1b2c3d4e5f60718': {'path': vault, 'ts': 1}}}, fh)
+
+    typed = vault.replace(os.sep, '/').upper()
+    s.ok('UI-46', 'a folder already listed is matched however its path was typed',
+         UI.obsidian_id(typed, listed) == 'a1b2c3d4e5f60718', typed)
+
+    fresh = os.path.join(tempfile.mkdtemp(), 'obsidian.json')
+    new_vault = tempfile.mkdtemp()
+    vid, added = UI.obsidian_register(new_vault, fresh)
+    entry = UI.obsidian_vaults(fresh).get(vid) or {}
+    s.ok('UI-47', 'registering writes one entry: a 16-hex id, the absolute path, a timestamp',
+         added and len(vid) == 16 and int(vid, 16) >= 0
+         and entry.get('path') == os.path.abspath(new_vault) and entry.get('ts', 0) > 0,
+         repr(entry))
+
+    again, added_twice = UI.obsidian_register(new_vault, fresh)
+    s.ok('UI-48', 'a second press is not a second entry for one vault',
+         again == vid and not added_twice and len(UI.obsidian_vaults(fresh)) == 1)
+
+    uri = UI.obsidian_uri('C:/Obsidian Vaults/a place')
+    s.ok('UI-49', 'the path reaches the app as one encoded parameter, spaces and all',
+         uri.startswith('obsidian://open?path=') and ' ' not in uri and '%20' in uri, uri)
+
+    with_app = UI.start_argv('C:/vaults/place', obsidian=True)[-1]
+    s.ok('UI-50', 'the session command shows the vault before it starts the session',
+         with_app.index('Start-Process') < with_app.index('Set-Location') < with_app.index('claude ')
+         and 'obsidian://open?path=' in with_app, with_app)
+
+    s.ok('UI-51', 'a vault the app cannot open leaves the session command alone',
+         'Start-Process' not in UI.start_argv('C:/vaults/place')[-1])
+
+    closed = os.path.join(tempfile.mkdtemp(), 'obsidian.json')
+    place = tempfile.mkdtemp()
+    ready, note = UI.obsidian_ready(place, closed, running=False)
+    s.ok('UI-52', 'with the app closed an unlisted folder is registered, then ready',
+         ready and note is None and UI.obsidian_id(place, closed) is not None)
+
+    other = tempfile.mkdtemp()
+    refused, said = UI.obsidian_ready(other, closed, running=True)
+    s.ok('UI-53', 'with the app open an unlisted folder is refused, and the folder is named',
+         (not refused) and other in (said or '') and UI.obsidian_id(other, closed) is None,
+         said)
+
+    seen = {}
+    real, argv = UI.serve, sys.argv
+    try:
+        UI.serve = lambda **kw: seen.update(kw) or 0
+        sys.argv = ['serve.py']
+        UI.main()
+        plain = seen.get('once')
+        sys.argv = ['serve.py', '--once']
+        UI.main()
+    finally:
+        UI.serve, sys.argv = real, argv
+    s.ok('UI-54', 'the surface stops after one session only when it was asked to',
+         plain is False and seen.get('once') is True, repr(seen))
+
+
+GROUPS = (group_declarations, group_gate, group_argv, group_tier, group_page,
+          group_obsidian)

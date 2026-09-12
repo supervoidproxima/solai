@@ -24,6 +24,11 @@
 .PARAMETER NoHandoff
   Run every stage but do not open the guided page at the end.
 
+.PARAMETER CloseWhenDone
+  Close this window after the summary, but only when the summary has nothing in it for you to
+  do. A run that ends with a list stays on screen: closing a window over the one thing the
+  reader still has to act on would be worse than leaving it open.
+
 .PARAMETER ConfigRepo
   The private configuration repository, as owner/name. Default: the constant below.
 
@@ -39,6 +44,7 @@ param(
   [switch] $SkipApps,
   [switch] $PublicOnly,
   [switch] $NoHandoff,
+  [switch] $CloseWhenDone,
   [string] $PackageRepo = 'supervoidproxima/solai',
   [string] $ConfigRepo  = 'supervoidproxima/claude-config'
 )
@@ -60,12 +66,19 @@ $script:NativeExit = 0
 function Invoke-Native {
   param(
     [Parameter(Mandatory)] [string] $Exe,
-    [Parameter(ValueFromRemainingArguments = $true)] [string[]] $Arguments
+    [Parameter(ValueFromRemainingArguments = $true)] [object[]] $Arguments
   )
+  # A caller that hands over a prepared argument list - `Invoke-Native 'git' @($helper + @('fetch'))`
+  # - is building an array, not splatting one, so the whole list arrives as a single element and
+  # collapses into one space-joined token on the command line. Flatten it here instead of asking
+  # every call site to remember which form it used.
+  $argv = @()
+  foreach ($a in $Arguments) { $argv += @($a) }
+  $argv = [string[]] @($argv | Where-Object { $null -ne $_ })
   $saved = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   try {
-    $out = & $Exe @Arguments 2>&1
+    $out = & $Exe @argv 2>&1
     $script:NativeExit = $LASTEXITCODE
   } catch {
     $out = $_.Exception.Message
@@ -111,7 +124,11 @@ function Have([string] $Command) {
 Write-Stage 'preflight'
 
 # A machine can carry several OneDrive roots (personal plus one per work tenant), and the
-# environment variable names only one of them. Prefer whichever root actually holds the vaults.
+# environment variable names only one of them. More than one root can hold an 'Obsidian Vaults'
+# folder too, so taking the first match is not enough: on a machine whose personal OneDrive holds
+# a few leftover vaults and whose work tenant holds every real one, first-match pointed the guided
+# page at the wrong root. Rank instead - a root that already holds a solai place wins, then the
+# root with the most vaults in it, and the discovery order breaks any remaining tie.
 $oneDriveRoots = @(Get-ChildItem $env:USERPROFILE -Directory -Filter 'OneDrive*' -ErrorAction SilentlyContinue |
                    Select-Object -ExpandProperty FullName)
 foreach ($e in @($env:OneDriveCommercial, $env:OneDrive)) {
@@ -119,11 +136,22 @@ foreach ($e in @($env:OneDriveCommercial, $env:OneDrive)) {
 }
 $vaultRoot = $null
 $onedrive  = $null
-foreach ($root in $oneDriveRoots) {
+$ranked    = @()
+for ($i = 0; $i -lt $oneDriveRoots.Count; $i++) {
+  $root      = $oneDriveRoots[$i]
   $candidate = Join-Path $root 'Obsidian Vaults'
-  if (Test-Path $candidate) { $vaultRoot = $candidate; $onedrive = $root; break }
+  if (-not (Test-Path $candidate)) { continue }
+  $vaults = @(Get-ChildItem $candidate -Directory -ErrorAction SilentlyContinue)
+  $places = @($vaults | Where-Object { Test-Path (Join-Path $_.FullName '_system/os/answers.toml') })
+  $ranked += [pscustomobject]@{ Root = $root; Vaults = $candidate; Places = $places.Count; Count = $vaults.Count; Order = $i }
 }
-if (-not $onedrive -and $oneDriveRoots.Count -gt 0) {
+if ($ranked.Count -gt 0) {
+  $best = @($ranked | Sort-Object @{ Expression = 'Places'; Descending = $true },
+                                  @{ Expression = 'Count';  Descending = $true },
+                                  @{ Expression = 'Order';  Descending = $false })[0]
+  $onedrive  = $best.Root
+  $vaultRoot = $best.Vaults
+} elseif ($oneDriveRoots.Count -gt 0) {
   $onedrive  = $oneDriveRoots[0]
   $vaultRoot = Join-Path $onedrive 'Obsidian Vaults'
 }
@@ -158,8 +186,41 @@ foreach ($candidate in @(@('python', @('-c', "import sys;print('%d.%d' % sys.ver
 }
 $pyOk = [bool]($pyVersion -and ([version]$pyVersion -ge [version]'3.11'))
 
+# winget ships with App Installer, so a machine can have it installed and unreachable at the same
+# time: the Store alias folder is not always on PATH, and the run used to stop and tell the reader
+# to install something they already had. Look for it where it actually lives, then put its folder
+# on PATH for this session and for the user permanently.
+$wingetNote = $null
+$wingetDir  = $null
+if (-not (Have 'winget')) {
+  $aliasDir   = Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft') 'WindowsApps'
+  $candidates = @(Join-Path $aliasDir 'winget.exe')
+  try {
+    foreach ($a in @(Get-AppxPackage -Name 'Microsoft.DesktopAppInstaller' -ErrorAction SilentlyContinue)) {
+      if ($a.InstallLocation) { $candidates += (Join-Path $a.InstallLocation 'winget.exe') }
+    }
+  } catch { }
+  foreach ($c in $candidates) {
+    if ((-not $wingetDir) -and (Test-Path $c)) { $wingetDir = Split-Path $c -Parent }
+  }
+  if ($wingetDir) {
+    if (($env:PATH -split ';') -notcontains $wingetDir) { $env:PATH = $env:PATH.TrimEnd(';') + ';' + $wingetDir }
+    $userPath = [string] [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if (($userPath -split ';') -notcontains $wingetDir) {
+      if ($DryRun) {
+        $wingetNote = "would put winget on your PATH: $wingetDir"
+      } else {
+        [Environment]::SetEnvironmentVariable('PATH', ($userPath.TrimEnd(';') + ';' + $wingetDir).TrimStart(';'), 'User')
+        $wingetNote = "winget was installed but not on PATH: added $wingetDir"
+      }
+    } else {
+      $wingetNote = "winget found at $wingetDir, this session picks it up"
+    }
+  }
+}
+
 $present = [ordered]@{
-  'winget'      = (Have 'winget')
+  'winget'      = ((Have 'winget') -or ($null -ne $wingetDir))
   'git'         = (Have 'git')
   'python 3.11+'= $pyOk
   'gh'          = (Have 'gh')
@@ -176,15 +237,19 @@ if ($pyVersion) {
 } elseif (Have 'python') {
   Say 'action' 'python is on PATH but does not answer: the Microsoft Store alias, not an interpreter'
 }
+if ($wingetNote) { Say 'ok' $wingetNote }
 
 if (-not $present['winget']) {
-  Say 'failed' 'winget is required and is not on PATH. Install App Installer from the Microsoft Store, then run this again.'
+  Say 'failed' 'winget is required and was not found. Install App Installer from the Microsoft Store, or turn its app-execution alias back on in Settings, then run this again.'
   return
 }
 
 if ($DryRun) {
   Write-Host ''
   Write-Host '      dry run: stages 1 to 8 would run as listed above. Nothing was written.' -ForegroundColor DarkGray
+  if ($CloseWhenDone) {
+    Write-Host '      would close this window afterwards, unless the summary had a list in it.' -ForegroundColor DarkGray
+  }
   return
 }
 
@@ -221,8 +286,20 @@ Write-Stage 'Claude Code'
 if (Have 'claude') {
   Say 'ok' ("already installed: " + (Invoke-Native 'claude' '--version'))
 } else {
-  # The native installer needs no elevation and keeps itself updated afterwards.
-  irm https://claude.ai/install.ps1 | iex
+  # The native installer needs no elevation and keeps itself updated afterwards. It runs in a
+  # child process rather than as `irm | iex`: this script is itself piped into `iex`, so a nested
+  # `iex` inherits the outer pipeline's stdin and the inner installer stalls with the stage
+  # half-printed and nothing further. A file plus a child process give it a console of its own.
+  $shell     = if (Have 'pwsh') { 'pwsh' } else { 'powershell' }
+  $installer = Join-Path ([System.IO.Path]::GetTempPath()) 'claude-install.ps1'
+  try {
+    Invoke-WebRequest 'https://claude.ai/install.ps1' -UseBasicParsing -OutFile $installer
+    $null = Invoke-Native $shell '-NoProfile' '-ExecutionPolicy' 'Bypass' '-File' $installer
+  } catch {
+    Say 'action' ('could not fetch the Claude Code installer: ' + $_.Exception.Message)
+  } finally {
+    Remove-Item $installer -Force -ErrorAction SilentlyContinue
+  }
   $local = Join-Path $env:USERPROFILE '.local\bin'
   if (Test-Path (Join-Path $local 'claude.exe')) {
     $env:Path = "$local;$env:Path"
@@ -282,10 +359,15 @@ if (Test-Path $configMarker) {
     # Git for Windows bundles Git Credential Manager, which signs in through the browser and
     # needs no elevation. The GitHub CLI is used only if it happens to be here and logged in:
     # its installer is machine-wide, and on a locked-down machine it cannot be installed at all.
+    # `gh auth status` reports "Logged in" for any host it knows, an enterprise one included,
+    # and for a token that cannot serve git. Matching that string once cost a whole restore:
+    # the helper was chosen, returned nothing, git fell back to its own prompt, and under
+    # `irm | iex` there is no tty for one. Ask for the github.com token instead and let the
+    # exit code decide, which is the only functional proof the helper will produce a credential.
     $helper = @()
     if (Have 'gh') {
-      $status = Invoke-Native 'gh' 'auth' 'status'
-      if ($status -match 'Logged in') {
+      $null = Invoke-Native 'gh' 'auth' 'token' '--hostname' 'github.com'
+      if ($script:NativeExit -eq 0) {
         $helper = @('-c', 'credential.helper=', '-c', 'credential.helper=!gh auth git-credential')
         Say 'ok' 'authenticating through the GitHub CLI'
       }
@@ -302,7 +384,16 @@ if (Test-Path $configMarker) {
       if ($remotes -notmatch '(?m)^origin$') {
         $null = Invoke-Native 'git' 'remote' 'add' 'origin' ("https://github.com/{0}.git" -f $ConfigRepo)
       }
-      $fetched = Invoke-Native 'git' @($helper + @('fetch', '--quiet', 'origin'))
+      # Git Credential Manager opens its own browser window and is unaffected by this; what it
+      # switches off is git's terminal prompt, which cannot work here and fails obscurely
+      # (`/dev/tty: No such device or address`) instead of saying the credential is missing.
+      $savedPrompt = $env:GIT_TERMINAL_PROMPT
+      $env:GIT_TERMINAL_PROMPT = '0'
+      try {
+        $fetched = Invoke-Native 'git' @($helper + @('fetch', '--quiet', 'origin'))
+      } finally {
+        $env:GIT_TERMINAL_PROMPT = $savedPrompt
+      }
       if ($script:NativeExit -ne 0) { throw ('fetch failed - ' + $fetched) }
       $remoteInfo = Invoke-Native 'git' @($helper + @('remote', 'show', 'origin'))
       $branch = ([regex]::Match($remoteInfo, 'HEAD branch:\s*(\S+)')).Groups[1].Value
@@ -314,7 +405,8 @@ if (Test-Path $configMarker) {
       # What git said is the whole value of this stage failing. Swallowing it leaves the next
       # run guessing between a credential problem, a private repository and a wrong branch.
       Say 'failed' (($_.Exception.Message -split "`r?`n" | Where-Object { $_ } ) -join ' / ')
-      Need ("restore the configuration by hand: git clone https://github.com/{0}.git" -f $ConfigRepo)
+      Need 'if this was the credential: `gh auth setup-git`, or clear the gh login and let Git Credential Manager take it'
+      Need ("then restore by hand in ~/.claude: git init; git remote add origin https://github.com/{0}.git; git fetch origin; git checkout -f main" -f $ConfigRepo)
     } finally {
       Pop-Location
     }
@@ -386,10 +478,16 @@ if ($NoHandoff) {
 } elseif ((Test-Path $serve) -and $pyExe) {
   Say 'ok' 'opening the guided page. Close it with Ctrl+C when you are done.'
   # Not through Invoke-Native: this one is meant to stay in the foreground and print as it goes.
-  if ($vaultRoot) { & $pyExe $serve --vaults $vaultRoot }
-  else { & $pyExe $serve }
+  # --once: the page stops itself once a session is started, so this terminal is handed back
+  # instead of being held open by a server behind the window the reader is now working in.
+  if ($vaultRoot) { & $pyExe $serve --vaults $vaultRoot --once }
+  else { & $pyExe $serve --once }
 } else {
-  Need 'start the guided page by hand: py <package>\skills\solai-scaffold\serve.py'
+  if (Test-Path $serve) {
+    Need ("start the guided page by hand: py `"{0}`"" -f $serve)
+  } else {
+    Need 'the guided page was not found in the installed package: reinstall the plugin, then run serve.py by hand'
+  }
 }
 
 # --------------------------------------------------------------------------- summary
@@ -401,3 +499,16 @@ if ($script:Todo.Count -eq 0) {
   foreach ($t in $script:Todo) { Write-Host ("  - " + $t) -ForegroundColor Yellow }
 }
 Write-Host ''
+
+# The window this ran in has nothing left to hold: the session opened in a console of its own
+# and the page stopped itself. Closing it is Stop-Process on this host rather than `exit`,
+# which under `irm | iex` ends the piped script and leaves the prompt sitting there.
+if ($CloseWhenDone) {
+  if ($script:Todo.Count -gt 0) {
+    Write-Host '  this window stays open: the list above is for you.' -ForegroundColor Yellow
+  } else {
+    Write-Host '  closing this window.' -ForegroundColor DarkGray
+    Start-Sleep -Seconds 2
+    Stop-Process -Id $PID
+  }
+}
