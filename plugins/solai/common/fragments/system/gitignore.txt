@@ -1,0 +1,38 @@
+# Seeded once by solai and yours from now on. Add to it; nothing regenerates it.
+
+# Machine-local caches.
+__pycache__/
+*.pyc
+
+# Obsidian's per-device editor state. Which files were open, and how the panes were
+# arranged, is a property of one machine and not of this vault.
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+
+# ---------------------------------------------------------------- personal data
+#
+# THE RULE: a file that holds personal data carries `sensitive` in its NAME, and this glob
+# covers it at any depth before it exists.
+#
+# WHY IT IS A GLOB AND NOT A LIST OF FILENAMES. A vault built by this package held 728
+# children's national identifiers in a file sitting untracked in the working tree, one
+# `git add` away from a commit that cannot be withdrawn. It was a sync client's conflict
+# copy. The page it copied WAS ignored, by a rule naming that page exactly, and an exact
+# name does not cover a copy of it. The rule had been correct about the file it named and
+# useless about the file that turned up beside it.
+#
+# So: name the file for what it holds rather than adding a rule after you notice it.
+# `students-sensitive.csv` is covered here, and so is every conflict copy, dated variant
+# and machine-suffixed copy a sync client invents next.
+*sensitive*
+
+# Conflict copies, in the shapes that can be matched safely. OneDrive's is
+# `name-MACHINENAME.ext`, which cannot be globbed without swallowing legitimate files, so
+# it is NOT covered here. That is the gap the `sensitive` marker above exists to close, and
+# `_system/scripts/check_sensitive.py` is what catches what neither of them did.
+*conflicted copy*
+*[Cc]onflicted [Cc]opy*
+
+# Run `py _system/scripts/check_sensitive.py .` before any `git add` of a folder, and after
+# any sync. It reports a file that is untracked, unignored and carrying identifiers as RED,
+# which is the exact state described above.

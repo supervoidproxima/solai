@@ -88,3 +88,9 @@ path     = "changes/CHG-001.md"
 mode     = "seeded"
 fragment = "chg/chg-001.md"
 bootstrap = true
+
+[[artefacts]]
+id       = "gitignore"
+path     = ".gitignore"
+mode     = "seeded"
+fragment = "system/gitignore.txt"

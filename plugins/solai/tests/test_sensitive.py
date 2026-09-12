@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""9 assertions on the personal-identifier guard.
+"""11 assertions on the personal-identifier guard and the ignore rule it ships with.
 
 Every one of them is shaped by a failure that already happened in a vault this package built.
 `CHG-134` there: a sync client's conflict copy, untracked, carrying 728 children's national
@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(PKG, 'runtime'))
 
 import check_sensitive as CS                                        # noqa: E402
 
-EXPECTED = 9
+EXPECTED = 11
 NAME = 'sensitive'
 
 IIN = '030512500123'
@@ -115,4 +115,32 @@ def group_clean(s):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-GROUPS = (group_patterns, group_states, group_clean)
+def group_shipped_rule(s):
+    """The seeded `.gitignore` is half of the answer; these two say which half."""
+    tmp = tempfile.mkdtemp(prefix='solai-test-sn3-')
+    try:
+        frag = io.open(os.path.join(PKG, 'common', 'fragments', 'system', 'gitignore.txt'),
+                       encoding='utf-8').read()
+        rows = 'iin %s\niin 030512500131\niin 030512500132\n' % IIN
+        root = _vault(tmp, {
+            '.gitignore': frag,
+            'tracked.md': 'nothing here\n',
+            'data/students-sensitive.csv': rows,
+            'data/students.csv': rows,
+        })
+        code, out = _run(root)
+
+        s.ok('SN-10', 'the shipped rule covers a marker-named file at any depth, by glob',
+             'students-sensitive.csv' in out and 'ignored' in out
+             and 'EXPOSED    data' not in out.replace(os.sep, '/'),
+             'name the file for what it holds and it is covered before it exists')
+
+        s.ok('SN-11', 'a file without the marker is still EXPOSED, which is why the marker is '
+                      'the rule and not a nicety',
+             code == 1 and 'students.csv' in out and 'SENSITIVE RED' in out,
+             'the ignore rule prevents; the guard is what catches the one nobody named')
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+GROUPS = (group_patterns, group_states, group_clean, group_shipped_rule)

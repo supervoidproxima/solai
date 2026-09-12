@@ -197,6 +197,12 @@ foreach = "workflows"
 regions = ["meta", "script"]
 generated = ["meta", "script"]
 
+[[artefacts]]
+id       = "gitignore"
+path     = ".gitignore"
+mode     = "seeded"
+fragment = "system/gitignore.txt"
+
 # --------------------------------------------------------------------------- loop
 
 [[loop]]

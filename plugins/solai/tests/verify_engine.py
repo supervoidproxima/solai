@@ -43,6 +43,10 @@ the attachment conventions to be declared against.
 and its card skill are not written. The declaration still ships and is still installable;
 it is the building of it by default that stopped.
 
+All four moved by one again when a seeded `.gitignore` became an artefact, `minimal`
+included: a vault with no card classes can still be put under git beside a sync client, and
+the rule that failed in CHG-134 does not care what an archetype declares.
+
 The three card archetypes moved by one each when `check_sensitive.py` joined the copied
 runtime. It ships to every archetype that carries scripts rather than only to one that says
 it holds data about people, because the failure it guards against is a file nobody declared:
@@ -88,10 +92,10 @@ SCAFFOLD = os.path.join(PKG, 'skills', 'solai-scaffold', 'scaffold.py')
 FRESH_GATES = {'AV-3'}
 
 CASES = (
-    ('minimal', 'en', 7, 0, 0),
-    ('project', 'en', 47, 5, 3),
-    ('personal', 'ru', 35, 2, 0),
-    ('role', 'en', 39, 5, 2),
+    ('minimal', 'en', 8, 0, 0),
+    ('project', 'en', 48, 5, 3),
+    ('personal', 'ru', 36, 2, 0),
+    ('role', 'en', 40, 5, 2),
 )
 
 ANSWERS = ('remit=A throwaway place built only to verify the engine.',

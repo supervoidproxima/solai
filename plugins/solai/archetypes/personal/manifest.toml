@@ -205,6 +205,12 @@ foreach = "agents"
 regions = ["frontmatter", "job", "returns", "evals"]
 generated = ["frontmatter", "job", "returns", "evals"]
 
+[[artefacts]]
+id       = "gitignore"
+path     = ".gitignore"
+mode     = "seeded"
+fragment = "system/gitignore.txt"
+
 # --------------------------------------------------------------------------- loop
 
 [[loop]]
