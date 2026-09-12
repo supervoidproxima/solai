@@ -36,6 +36,7 @@ a script may propose a deletion, and releasing it is a person's own act.
 | `stamp_check.py` | check | after any engine run | has a generated region been hand-edited |
 | `check_agents.py` | check | after editing an agent | does every agent declare a return schema and an eval |
 | `check_sensitive.py` | check | **before any `git add` of a folder**, and after any sync | is a personal identifier sitting in a file nothing would stop you committing |
+| `mint_change.py` | generator | **whenever a change record is owed** | which number is mine, claimed by creating the file rather than by reading the folder |
 | `measure_cards.py` | report | before cutting a card down | how long the cards in one folder actually are |
 | `gen_dashboard.py` | generator | **last, always** | the one page that shows the vault to a person |
 

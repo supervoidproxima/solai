@@ -170,7 +170,8 @@ from  = "runtime/"
 files = ["check_links.py", "stamp_check.py", "validate_cards.py",
          "gen_dashboard.py", "check_agents.py", "check_binaries.py",
          "measure_cards.py",
-         "check_sensitive.py"]
+         "check_sensitive.py",
+         "mint_change.py"]
 
 [[artefacts]]
 id       = "chg-001"

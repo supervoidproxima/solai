@@ -154,9 +154,9 @@ judging an answer takes a model call that script does not make.
 
 ## STEP 7 - `change "<what>"`
 
-Mint the next `CHG-NNN` in the vault's change folder by globbing, never by counting. Body is
-a table of Change, Reason, Impact. A record is immutable once written: correcting one means
-writing the next.
+**Never mint a number yourself.** `py <vault>/_system/scripts/mint_change.py "<vault>"
+--title "<what>"` claims it by creating the file; write the body into what it names. Table of
+Change, Reason, Impact; immutable once written; correcting one means writing the next.
 
 What obliges a record is in the vault's own CLAUDE.md. Read it there rather than deciding
 here, so the document and this tool cannot disagree.

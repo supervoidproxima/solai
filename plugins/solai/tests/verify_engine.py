@@ -43,6 +43,10 @@ the attachment conventions to be declared against.
 and its card skill are not written. The declaration still ships and is still installable;
 it is the building of it by default that stopped.
 
+The three card archetypes moved by one more when `mint_change.py` joined the copied
+runtime. `minimal` does not take it: it has a change folder but no `_system/scripts`, so the
+number it mints is minted by hand and that is a real gap rather than a decision.
+
 All four moved by one again when a seeded `.gitignore` became an artefact, `minimal`
 included: a vault with no card classes can still be put under git beside a sync client, and
 the rule that failed in CHG-134 does not care what an archetype declares.
@@ -93,9 +97,9 @@ FRESH_GATES = {'AV-3'}
 
 CASES = (
     ('minimal', 'en', 8, 0, 0),
-    ('project', 'en', 48, 5, 3),
-    ('personal', 'ru', 36, 2, 0),
-    ('role', 'en', 40, 5, 2),
+    ('project', 'en', 49, 5, 3),
+    ('personal', 'ru', 37, 2, 0),
+    ('role', 'en', 41, 5, 2),
 )
 
 ANSWERS = ('remit=A throwaway place built only to verify the engine.',
