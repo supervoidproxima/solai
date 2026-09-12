@@ -87,8 +87,20 @@ engine's pass state resting on someone's word about a run nobody could repeat.
 | personal | **ru** | 37 | 2 | 0 |
 | role | en | 41 | 5 | 2 |
 
-Plus, per archetype that ships the checkers: 0 BLOCKER, 0 GATE, every stamped item clean, 0
-broken links. `personal` runs in Russian because the label files are exercised nowhere else.
+Plus, per archetype that ships the checkers: 0 BLOCKER, every stamped item clean, 0 broken
+links, and the one gate a freshly built place is SUPPOSED to raise - `AV-3`, nothing shipped yet.
+Demanding zero gates of a place that has by construction shipped nothing is a category error, and
+it is why this file had once been red on three archetypes out of four. `personal` runs in Russian
+because the label files are exercised nowhere else.
+
+**The three scenarios.** After the four archetypes, three runs mutate a vault that has already
+been built and measured, so none of them moves the counts above. `evolved` retires a class and
+re-applies. `upgraded` takes a package upgrade over a vault declaring a class, an agent and a
+workflow the package lacks, and all three must survive it. `answerable` writes two cards and a
+document into a built vault and builds a knowledge base out of it: 4 records, the block anchor
+surviving into a citation, no record out of a file the engine generated, an identical rebuild, an
+output inside the vault refused, and every file in the vault hashed before and after to prove the
+build wrote nothing into the thing it reads.
 
 **The probe.** After everything reads clean, one generated region is edited and the stamp check
 must name it. An all-clean report proves the checker ran, not that it works - a checker that

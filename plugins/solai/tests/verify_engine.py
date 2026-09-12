@@ -73,14 +73,24 @@ identical call sequence, then kills a run mid-way and demands the surviving pref
 is the property a resume actually depends on. A live runner cache and a real model call remain
 unexercised, and are stated as such rather than implied.
 
-Two scenarios run after the four archetypes and neither touches the counts above, because
-both mutate a vault that has already been built and measured. `evolved` retires a class from
+Three scenarios run after the four archetypes and none touches the counts above, because
+each mutates a vault that has already been built and measured. `evolved` retires a class from
 a `role` vault and re-applies. `upgraded` is its mirror: a `project` vault declares a class, an
 agent and a workflow that the package does not carry and then takes a package upgrade, which
 must keep all three. Those two directions are the whole contract between a vault and the
 package it was built from.
+
+`answerable` is the third: cards are written into a built vault and a knowledge base is built
+out of it. The unit suite proves the build's refusals against a corpus it invents; this proves
+the pairing - that a vault THIS ENGINE produced is a corpus the build can read, that no file
+the engine generated becomes an answer, and that the vault is not written to. The last one is
+asserted by hashing every file in the vault before and after and demanding not one byte moved,
+because "it does not write into the vault" is the layer's whole boundary and a claim of that
+shape cannot be read off the code.
 """
+import hashlib
 import io
+import json
 import os
 import re
 import shutil
@@ -136,6 +146,42 @@ CASES = (
 ANSWERS = ('remit=A throwaway place built only to verify the engine.',
            'first_artefact=One verification report that leaves this place.')
 
+KB_BUILD = os.path.join(PKG, 'skills', 'solai-kb', 'kb_build.py')
+KB_ASK = os.path.join(PKG, 'skills', 'solai-kb', 'kb_ask.py')
+
+# The rules file the `answerable` scenario writes beside its output. It names only the card
+# folders and `sources/`: everything the engine generated is left outside the selection, which
+# is the arrangement a real vault uses and the one the scenario then checks was honoured.
+KB_RULES = '''\
+name  = "verify"
+vault = "%s"
+
+[include]
+paths = ["registry/**/*.md", "sources/*.md"]
+
+[granularity]
+card = ["gap", "question"]
+'''
+
+# Two cards and one document, written into a built vault the way a user writes them. The
+# document carries two heading levels and a block anchor, so the clause path and the anchored
+# citation are exercised against real engine-built surroundings rather than a fixture.
+CORPUS = (
+    ('registry/gaps/GAP-001.md',
+     '---\nid: GAP-001\ntype: gap\ndate: 2026-09-12\nstatus: on-review\n'
+     'text: "Reconciliation is done by hand"\n---\n\n'
+     'The reconciliation between the two ledgers is done by hand every month.\n'),
+    ('registry/questions/QST-001.md',
+     '---\nid: QST-001\ntype: question\ndate: 2026-09-12\nstatus: open\n'
+     'question: "Who owns the reconciliation"\n---\n\n'
+     'Nobody has named an owner for the monthly reconciliation.\n'),
+    ('sources/2026-09-12-handbook.md',
+     '---\nid: HBK-001\ntype: note\ntitle: Handbook\n---\n\n'
+     '## Part one\n\n### 1.1 Monthly close ^b4c5d6\n\n'
+     'The close runs on the fifth working day.\n\n'
+     '### 1.2 Exceptions\n\nAn exception is signed by the owner.\n'),
+)
+
 
 def run(args, cwd=None):
     p = subprocess.run([sys.executable] + [str(a) for a in args], cwd=cwd,
@@ -146,6 +192,23 @@ def run(args, cwd=None):
 def num(pattern, text, default=None):
     m = re.search(pattern, text)
     return int(m.group(1)) if m else default
+
+
+def snapshot(root):
+    """Every file under `root`, by relative path and digest.
+
+    A read-only claim about a tool is only as good as what was compared afterwards. A file
+    count would miss an edit in place and a timestamp would miss nothing but would also fire
+    on a clock, so this hashes the bytes.
+    """
+    out = {}
+    for base, _dirs, names in os.walk(root):
+        for name in names:
+            path = os.path.join(base, name)
+            rel = os.path.relpath(path, root).replace('\\', '/')
+            with io.open(path, 'rb') as fh:
+                out[rel] = hashlib.sha256(fh.read()).hexdigest()
+    return out
 
 
 def main():
@@ -405,6 +468,114 @@ def main():
             checks.append('kept what only the vault declared, through an upgrade: %s'
                           % ('ok' if ok else 'FAILED'))
             rows.append(('upgraded', 'en', 'project, a class, an agent and a workflow the package lacks',
+                         '   ' + checks[0]))
+
+        # ------------------------------------------------------- the vault is answerable
+        # The knowledge layer's end of the contract. A vault the engine built is turned into a
+        # kb/ that lives outside it. The unit suite proves the refusals against a corpus it
+        # invents; what can only be proved here is the pairing with a real built vault.
+        root = os.path.join(tmp, 'project')
+        kb_home = os.path.join(tmp, 'kb-project')
+        checks, ok = [], True
+        if os.path.isdir(root):
+            os.makedirs(kb_home)
+            for rel, text in CORPUS:
+                path = os.path.join(root, *rel.split('/'))
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                io.open(path, 'w', encoding='utf-8', newline='\n').write(text)
+            io.open(os.path.join(kb_home, 'kb.toml'), 'w', encoding='utf-8',
+                    newline='\n').write(KB_RULES % root.replace('\\', '/'))
+            out_dir = os.path.join(kb_home, 'kb')
+
+            before = snapshot(root)
+            code, out = run([KB_BUILD, kb_home, '--dry-run'])
+            if code != 0 or os.path.isdir(out_dir):
+                failures.append('answerable: the dry run exited %d%s'
+                                % (code, ' and wrote a kb anyway' if os.path.isdir(out_dir)
+                                   else ''))
+                ok = False
+
+            code, out = run([KB_BUILD, kb_home])
+            if code != 0:
+                failures.append('answerable: the build exited %d over a vault this engine '
+                                'built:\n      %s' % (code, out.strip()[-600:].replace(
+                                    '\n', '\n      ')))
+                ok = False
+            missing = [n for n in ('records.jsonl', 'index.sqlite', 'manifest.json', 'docs')
+                       if not os.path.exists(os.path.join(out_dir, n))]
+            if missing:
+                failures.append('answerable: the build wrote no %s' % ', '.join(missing))
+                ok = False
+
+            man, recs = {}, []
+            if not missing:
+                man = json.loads(io.open(os.path.join(out_dir, 'manifest.json'),
+                                         encoding='utf-8').read())
+                recs = [json.loads(ln) for ln in
+                        io.open(os.path.join(out_dir, 'records.jsonl'),
+                                encoding='utf-8').read().splitlines() if ln.strip()]
+
+            # Two cards and a two-clause document. Exact, because the corpus is this file's
+            # own: a count that moves here means the extraction changed, which is the one
+            # thing a citation cannot survive quietly.
+            if len(recs) != 4:
+                failures.append('answerable: %d records from a corpus of 2 cards and a '
+                                '2-clause document, expected 4' % len(recs))
+                ok = False
+            kinds = sorted({r['kind'] for r in recs})
+            if kinds != ['card.gap', 'card.question', 'document.section']:
+                failures.append('answerable: record kinds %s, expected a card per card class '
+                                'and the document split into sections' % kinds)
+                ok = False
+            if not [r for r in recs if r.get('anchor') == 'b4c5d6'
+                    and r['cite_kind'] == 'anchor']:
+                failures.append('answerable: the block anchor in the document did not survive '
+                                'into a citation, so the deep link is approximate')
+                ok = False
+
+            # Nothing the engine generated may become an answer. The selection is stated in
+            # kb.toml, and this is the check that it was honoured rather than merely written.
+            leaked = sorted({r['path'] for r in recs
+                             if r['path'].startswith(('.claude/', '_system/'))})
+            if leaked:
+                failures.append('answerable: %d records came out of generated engine files: %s'
+                                % (len(leaked), ', '.join(leaked[:3])))
+                ok = False
+
+            after = snapshot(root)
+            if after != before:
+                changed = sorted(set(after) ^ set(before)) or \
+                    sorted(k for k in after if before.get(k) != after[k])
+                failures.append('answerable: the build changed %d file(s) in the vault it '
+                                'reads: %s' % (len(changed), ', '.join(changed[:3])))
+                ok = False
+
+            code, out2 = run([KB_BUILD, kb_home])
+            man2 = json.loads(io.open(os.path.join(out_dir, 'manifest.json'),
+                                      encoding='utf-8').read()) if not missing else {}
+            if code != 0 or man2.get('records_hash') != man.get('records_hash'):
+                failures.append('answerable: the same corpus and builder rebuilt to different '
+                                'records (%s then %s)'
+                                % (man.get('records_hash'), man2.get('records_hash')))
+                ok = False
+
+            code, out3 = run([KB_ASK, kb_home, 'reconciliation by hand'])
+            if code != 0 or 'GAP-001' not in out3:
+                failures.append('answerable: retrieval did not find the card that carries the '
+                                'question words')
+                ok = False
+
+            code, out4 = run([KB_BUILD, kb_home, '--out', os.path.join(root, 'kb')])
+            if code == 0 or 'refusing to build inside the vault' not in out4:
+                failures.append('answerable: a build whose output lands inside the vault was '
+                                'not refused by name')
+                ok = False
+
+            checks.append('built a kb out of a built vault, wrote nothing into it: %s'
+                          % ('ok' if ok else 'FAILED'))
+            rows.append(('answerable', 'en',
+                         'project, %d records, %d files refused'
+                         % (len(recs), len(man.get('refused', []))),
                          '   ' + checks[0]))
 
         print('')

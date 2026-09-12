@@ -39,7 +39,7 @@ Read top to bottom as a single `--apply` travels it.
 | 3 | Generation | emitters turning one declaration into five projections | `lib/emit/`, `lib/engine.py` | `tests/run_tests.py`, 330 assertions |
 | 4 | Plan and write | four write modes, region merge, rollback manifest | `lib/fsplan.py`, `lib/regions.py`, `lib/stamp.py` | `--plan` default; applying twice is provably a no-op |
 | 5 | Storage | the vault: Markdown plus YAML, and its compiled declarations | the vault, `_system/os/` | `runtime/validate_cards.py`, `check_links.py` |
-| 6 | Knowledge | a built `kb/`: one record per citable unit, SQLite FTS, a manifest | `skills/solai-kb/` | four build refusals; `tests/test_kb.py`, 25 assertions |
+| 6 | Knowledge | a built `kb/`: one record per citable unit, SQLite FTS, a manifest | `skills/solai-kb/` | four build refusals; `tests/test_kb.py`, 25 assertions; the `answerable` scenario |
 | 7 | Safety | refusals, the human gate, the personal-data guard | `skills/solai/refusals.md`, `runtime/check_sensitive.py` | `tests/test_sensitive.py`, D19 |
 | 8 | Verification | three gates, run last, immediately before a push | `tests/`, `skills/solai-release/` | `release.py` refuses a dirty tree outright |
 | 9 | Observability | a build ledger and a dashboard. No traces, no metrics | `_system/os/build.md`, `runtime/gen_dashboard.py` | **thin, see below** |
@@ -121,6 +121,11 @@ as the exemplar its rules file is copied from, and `--dry-run` before a real bui
 rule that puts `--plan` before `--apply` everywhere else. `tests/test_kb.py` builds a vault in
 a temporary folder and asserts what is selected, what is refused by name, what lands on disk,
 and that the same corpus rebuilds to the same bytes.
+
+The pairing with the rest of the stack is asserted where it can be: the `answerable` scenario in
+`verify_engine.py` builds a knowledge base out of a vault THIS ENGINE scaffolded, and hashes
+every file in that vault before and after. "It does not write into the vault" is this layer's
+whole boundary, and a claim of that shape cannot be read off the code.
 
 Two gates are asserted structurally rather than exercised, and the test module says so on its
 face: the cloud placeholder check, because no test can make a file Windows reports as living
