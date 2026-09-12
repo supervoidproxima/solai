@@ -48,6 +48,12 @@ import time
 import tomllib
 from pathlib import Path, PurePosixPath
 
+# The shared wikilink pattern, from `runtime/`. Imported by path rather than by package:
+# these scripts live in the package and are never copied into a vault, so unlike the
+# scripts a vault runs there is no copy of it beside them.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'runtime'))
+import _wikilink                                                    # noqa: E402
+
 SCHEMA = 1
 
 
@@ -72,7 +78,6 @@ PLACEHOLDER_MASK = (FILE_ATTRIBUTE_OFFLINE
 
 ANCHOR_RE = re.compile(r'\^([0-9a-f]{6})\s*$')
 INLINE_ANCHOR_RE = re.compile(r'\s*\^[0-9a-f]{6}\b')
-WIKILINK_RE = re.compile(r'\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]')
 FOOTNOTE_REF_RE = re.compile(r'\[\^[0-9]+\]')
 FOOTNOTE_DEF_RE = re.compile(r'(?m)^\[\^[0-9]+\]:.*$')
 EMBED_RE = re.compile(r'!\[\[[^\]]*\]\]')
@@ -93,7 +98,7 @@ def serve_text(text: str) -> str:
     t = FOOTNOTE_DEF_RE.sub('', t)
     t = FOOTNOTE_REF_RE.sub('', t)
     t = INLINE_ANCHOR_RE.sub('', t)
-    t = WIKILINK_RE.sub(lambda m: (m.group(2) or m.group(1)).strip(), t)
+    t = _wikilink.LINK.sub(lambda m: (m.group(2) or m.group(1)).strip(), t)
     t = re.sub(r'\n{3,}', '\n\n', t)
     return t.strip()
 
@@ -178,15 +183,7 @@ def _scalar(v: str):
 
 def wikitargets(value) -> list[str]:
     """`"[[PRC-037]]"` and `"[[R2R|R2R]]"` both become their target."""
-    out = []
-    for item in (value if isinstance(value, list) else [value]):
-        if not isinstance(item, str):
-            continue
-        for m in re.finditer(r'\[\[([^\]|#]+)', item):
-            out.append(m.group(1).strip())
-        if '[[' not in item and item:
-            out.append(item.strip())
-    return [o for o in out if o]
+    return _wikilink.targets(value)
 
 
 # --------------------------------------------------------------------------- selection

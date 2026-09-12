@@ -123,6 +123,13 @@ exit 2 before any work happens. The sentence it replaces promised that nothing w
 `--write`, which was never true and cannot be: a generator's whole job is to write, and
 `mint_change.py`'s write IS its claim on a number.
 
+They share one more thing, and for the same reason after the same evidence: `_wikilink.py`, what
+a wikilink looks like. Inside a Markdown table cell Obsidian requires the alias separator to be
+written `\|`, five patterns here read a wikilink, and none of them allowed it, so every link in
+every table read as broken: 1,808 reported defects on one vault where there were 8. The correct
+pattern had lived in that vault's own copy of `check_links.py` for days, which is what the rule
+being written five times costs.
+
 ## 6. Knowledge
 
 `skills/solai-kb/` builds a `kb/` out of a vault: one record per citable unit, a SQLite

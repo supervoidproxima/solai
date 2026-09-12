@@ -25,6 +25,12 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
+# The shared wikilink pattern, from `runtime/`. Imported by path rather than by package:
+# these scripts live in the package and are never copied into a vault, so unlike the
+# scripts a vault runs there is no copy of it beside them.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'runtime'))
+import _wikilink                                                    # noqa: E402
+
 # The kind of document is not a field anywhere in the vault. It is the first word
 # of its own title, which is how the documents name themselves, so it is derived
 # here and labelled as derived on the page.
@@ -66,13 +72,7 @@ def frontmatter(text: str) -> dict:
 
 
 def targets(v) -> list[str]:
-    out = []
-    for item in (v if isinstance(v, list) else [v]):
-        if not isinstance(item, str):
-            continue
-        m = re.findall(r'\[\[([^\]|#]+)', item)
-        out.extend(x.strip() for x in m) if m else out.append(item.strip())
-    return [x for x in out if x]
+    return _wikilink.targets(v)
 
 
 def derive_kind(title: str) -> str:

@@ -23,6 +23,10 @@ Every script reads its arguments through `_args.py`, which sits beside them: it 
 exits 2 without doing any of the work. So a mistyped invocation fails rather than quietly
 running against the wrong folder.
 
+They share `_wikilink.py` the same way: what a wikilink looks like, spelled once, so that the
+`\|` a table cell requires reads as an alias separator in every script here rather than in
+some of them.
+
 A **generator** owns its output completely: it may be deleted and rebuilt, and anything
 hand-added to its output is lost on the next run. A **check** writes nothing and exits
 non-zero on the one condition it is named for. Nothing in this folder deletes a file (D19):

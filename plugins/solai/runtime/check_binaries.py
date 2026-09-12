@@ -43,6 +43,7 @@ import tomllib
 # than by package, because these scripts are copied into a vault and run standalone.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _args                                                        # noqa: E402
+import _wikilink                                                    # noqa: E402
 
 USAGE = '''\
 usage: check_binaries.py [<vault>] [--json] [--list]
@@ -56,7 +57,6 @@ SKIP_DIRS = {'.obsidian', '.trash', '.git', 'node_modules', '__pycache__', '.cla
 # projection of the vault: nothing should describe a dashboard.
 NOT_BINARIES = ('.md', '.base', '.html')
 HEAD = 8192
-WL = re.compile(r'\[\[([^\]|#^]+)(?:[#^][^\]|]*)?(?:\|[^\]]*)?\]\]')
 KEBAB = re.compile(r'^[a-z0-9]+(?:[-.][a-z0-9]+)*$')
 
 # `name-policy` defaults to `any`, which reports nothing about names. The package cannot
@@ -114,7 +114,7 @@ def fm_values(text, key):
 
 def as_path(value):
     """A `file:` value is written as a quoted wikilink; take what it points at."""
-    m = WL.search(value)
+    m = _wikilink.LINK.search(value)
     return (m.group(1) if m else value).strip().replace(os.sep, '/')
 
 

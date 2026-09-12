@@ -150,14 +150,15 @@ required = true
 FRESH_GATES = {'AV-3'}
 
 # The NOOP count rose by one per archetype in 0.32.0, for `_system/os/stamps.json`, the record
-# for the artefacts whose own format carries no stamp, and by one again in 0.33.0 for
-# `_system/scripts/_args.py`, the one argument reader the nine scripts share. Both are ordinary
-# planned files, so a second run reports each NOOP like any other.
+# for the artefacts whose own format carries no stamp, by one again in 0.33.0 for
+# `_system/scripts/_args.py`, the one argument reader the nine scripts share, and by one again in
+# 0.35.0 for `_system/scripts/_wikilink.py`, the one wikilink pattern they share. All three are
+# ordinary planned files, so a second run reports each NOOP like any other.
 CASES = (
-    ('minimal', 'en', 10, 0, 0),
-    ('project', 'en', 51, 5, 3),
-    ('personal', 'ru', 39, 2, 0),
-    ('role', 'en', 43, 5, 2),
+    ('minimal', 'en', 11, 0, 0),
+    ('project', 'en', 52, 5, 3),
+    ('personal', 'ru', 40, 2, 0),
+    ('role', 'en', 44, 5, 2),
 )
 
 ANSWERS = ('remit=A throwaway place built only to verify the engine.',

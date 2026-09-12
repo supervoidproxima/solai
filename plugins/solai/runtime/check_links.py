@@ -26,6 +26,7 @@ import sys
 # than by package, because these scripts are copied into a vault and run standalone.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _args                                                        # noqa: E402
+import _wikilink                                                    # noqa: E402
 
 USAGE = '''\
 usage: check_links.py [<vault>] [--json] [--orphans]
@@ -35,7 +36,6 @@ usage: check_links.py [<vault>] [--json] [--orphans]
 sys.stdout.reconfigure(encoding='utf-8')
 
 SKIP_DIRS = {'.obsidian', '.trash', '.git', 'node_modules', '__pycache__', '.claude'}
-LINK = re.compile(r'\[\[([^\]|#^]+)(?:[#^][^\]|]*)?(?:\|[^\]]*)?\]\]')
 CODE_FENCE = re.compile(r'```.*?```', re.S)
 INLINE_CODE = re.compile(r'`[^`\n]*`')
 # `lib/emit/bases.py` writes exactly `- type == "duty"`. A filter this cannot parse simply
@@ -145,7 +145,7 @@ def scan(root):
         # links inside code are examples, not references
         text = INLINE_CODE.sub('', CODE_FENCE.sub('', text))
         for n, line in enumerate(text.split('\n'), 1):
-            for m in LINK.finditer(line):
+            for m in _wikilink.LINK.finditer(line):
                 target = m.group(1).strip()
                 if not target:
                     continue

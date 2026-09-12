@@ -38,6 +38,7 @@ import tomllib
 # than by package, because these scripts are copied into a vault and run standalone.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _args                                                        # noqa: E402
+import _wikilink                                                    # noqa: E402
 
 USAGE = '''\
 usage: validate_cards.py [<vault>] [--json] [--family a,b]
@@ -141,8 +142,7 @@ def fm_keys(fm):
 
 
 def wl_target(value):
-    m = re.match(r'^\[\[([^\]|#]+)', str(value).strip())
-    return m.group(1).strip() if m else None
+    return _wikilink.target(value)
 
 
 # --------------------------------------------------------------------------- model
