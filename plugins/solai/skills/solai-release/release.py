@@ -24,6 +24,10 @@ WHAT IT DOES NOT DO. It does not merge, because a conflict is a decision. It doe
 any vault, because a vault reads its own declarations and this package does not reach into one.
 It prints the vault obligation instead: a deliverable card is owed a `sent-on`, and a release
 that ships while the vault still reads `0 sent` has made the one number that matters wrong.
+
+It also names, before the gates, every vault it has been pointed at and has not been read since
+an older version. That list is knowingly incomplete: a package cannot discover a vault nobody
+ever told it about, and the print says so rather than reading as a clean bill.
 """
 import os
 import re
@@ -35,7 +39,7 @@ PKG = os.path.dirname(os.path.dirname(HERE))              # .../plugins/solai
 REPO = os.path.dirname(os.path.dirname(PKG))              # the git repository root
 
 sys.path.insert(0, PKG)
-from lib import VERSION                                             # noqa: E402
+from lib import VERSION, harvest                                    # noqa: E402
 
 GATES = (('package', 'tests/run_tests.py', 'GREEN'),
          ('engine', 'tests/verify_engine.py', 'VERIFICATION GREEN'),
@@ -105,6 +109,32 @@ def preflight():
     return problems, facts
 
 
+def print_harvest():
+    """Which vaults have not been read since a version that has shipped. Never a refusal.
+
+    It prints before the gates because harvesting is something to do BEFORE cutting a release,
+    not an obligation left behind by one: a fix living in a vault is a fix this version could
+    have carried. It cannot refuse, because the list is necessarily incomplete - a package
+    cannot discover a vault it was never told about - and a gate that fires on an incomplete
+    list teaches people to pass it rather than to run the verb.
+    """
+    log = harvest.read_log()
+    rows = harvest.due(log, VERSION)
+    print('harvest, and this is a reminder rather than a gate:')
+    if not log:
+        print('  no vault has ever been read. `scaffold.py "<vault>" --harvest` reads one, and '
+              'nothing here knows of a vault until it has.')
+    elif not rows:
+        print('  every vault this package has been pointed at was read at %s.' % VERSION)
+    else:
+        for vault, why in rows:
+            print('  %s' % vault)
+            print('      %s' % why)
+    print('  A vault nobody has ever run it against cannot appear above, and this script has no '
+          'way to find one.')
+    print()
+
+
 def main():
     apply_it = '--apply' in sys.argv[1:]
     print('solai release   %s' % VERSION)
@@ -115,6 +145,8 @@ def main():
     for k, v in facts:
         print('  %-18s %s' % (k, v))
     print()
+
+    print_harvest()
 
     if problems:
         print('refused:')

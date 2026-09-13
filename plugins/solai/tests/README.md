@@ -4,7 +4,7 @@ Four commands, all run from `~/.claude/solai/plugins/solai`. Run the first two a
 change; the last two run inside `verify_engine.py` and can also be pointed at a place by hand.
 
 ```
-python tests/run_tests.py                        # 417 assertions
+python tests/run_tests.py                        # 432 assertions
 python tests/verify_engine.py                    # four archetypes, applied twice, checked, probed
 python tests/check_workflow_js.py <place>        # every projected script is real JavaScript
 python tests/check_workflow_resume.py <place>    # every script replays identically
@@ -29,7 +29,8 @@ Each exits 0 only when green, so any of them can gate a commit.
 | `test_release.py` | 6 | the order of a release, and each refusal naming itself |
 | `test_args.py` | 14 | the shared argument reader, and every shipped script routed through it |
 | `test_wikilink.py` | 12 | the shared wikilink pattern, the five readers routed through it, and the escaped pipe a table cell requires |
-| **total** | **417** | |
+| `test_harvest.py` | 15 | 4 on which plan rows are a divergence, 6 on the log, 3 on staleness, 2 on the wiring |
+| **total** | **432** | |
 
 This table was stale on 2026-09-03 - it named 178 against a suite of 241, omitted `test_ui.py`
 entirely, and understated `test_primitives.py` by 17. It was stale again on 2026-09-12, at 266

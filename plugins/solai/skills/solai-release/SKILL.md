@@ -56,6 +56,17 @@ by hand, on the branch, where the gates can run over the result.
 **It does not write into any vault.** A vault reads its own declarations, and this package does
 not reach into one.
 
+## WHAT IT NAMES BEFORE THE GATES
+
+Every vault it has been pointed at and has not read since an older version, from the log that
+`scaffold.py "<vault>" --harvest` writes. It prints before the gates rather than after, because
+harvesting is something to do before cutting a release: a fix living in a vault is a fix this
+version could have carried.
+
+It cannot refuse on that list, and this is deliberate. The list is necessarily incomplete, since
+a package cannot discover a vault nobody told it about, and a gate that fires on an incomplete
+list is one people learn to pass rather than to satisfy.
+
 ## THE PART IT CANNOT DISCHARGE
 
 After a successful release it prints the obligation rather than pretending it is done: a

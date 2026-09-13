@@ -7,6 +7,7 @@
     py scaffold.py <vault-root> --rollback
     py scaffold.py <vault-root> --diff <region|path>
     py scaffold.py <vault-root> --adopt <region|path> --because CHG-NNN
+    py scaffold.py <vault-root> --harvest [--all]
     py scaffold.py <vault-root> --from-package
 
 `--plan` is the default and writes nothing. Exit 1 on any refusal.
@@ -27,6 +28,13 @@ the live ones. That is the exact catastrophe this exists to prevent, performed b
 Emitters and fragments are code and always come from the package; only DECLARATIONS become
 vault-local. So an emitter fix reaches every vault on a plain `--apply`, and only a
 declaration change needs `--from-package`.
+
+`--harvest` is the only mode that reads a vault for the package's benefit rather than the
+other way round, and it is read-only over the vault: it lists every copied file this vault has
+changed since the package wrote it and diffs it against what the package ships now. It is a
+mode here rather than a script of its own because every line above it - which declarations,
+which archetype, which manifest - has to be true before a plan row means anything, and a second
+place working that out is how this engine twice grew two answers to one question.
 
 `--from-package` MERGES, it does not replace. The package wins wherever both declare the
 same thing, and a class, lookup, agent or workflow this vault declares alone is kept, with its
@@ -76,7 +84,8 @@ ROW_ADOPTED_FILE = (
 
 def parse_argv(argv):
     opts = {'answers': {}, 'only': None, 'force': (), 'mode': 'plan', 'archetype': None,
-            'materials': [], 'region': None, 'because': None, 'from_package': False}
+            'materials': [], 'region': None, 'because': None, 'from_package': False,
+            'all': False}
     positional = []
     i = 0
     while i < len(argv):
@@ -89,6 +98,10 @@ def parse_argv(argv):
             opts['mode'] = 'plan'
         elif a == '--from-package':
             opts['from_package'] = True
+        elif a == '--harvest':
+            opts['mode'] = 'harvest'
+        elif a == '--all':
+            opts['all'] = True
         elif a == '--diff':
             opts['mode'] = 'diff'
             i += 1
@@ -142,6 +155,93 @@ def _plan_rows(root, pkg, answers, arch, o):
 SIGNABLE = ('FOREIGN', 'LOCAL', ST_HAND_EDITED)
 
 
+def diff_against_package(path, row, here, note=''):
+    """One copied file against what the package ships now. -> 0, or 1 with nothing to compare.
+
+    Shared by `--diff <path>` and `--harvest`, which ask one question about one file and the
+    same question about every file. Two renderings of one comparison drift, and the pair that
+    drifted most recently in this package was a signature written in one place and checked in
+    another, which cost two point releases in an hour.
+    """
+    import difflib
+    from lib import stamp as ST
+
+    if not row.content:
+        print('  %s [%s] %s' % (path, row.verdict, row.reason))
+        print('  no diff for this one: it is generated rather than copied, and the body it '
+              'would be compared against is built inside the plan. --adopt still applies.')
+        return 1
+    shipped = fsplan.read(row.content)
+    print()
+    print('%s   %s' % (path, row.verdict))
+    if note:
+        print('  %s' % note)
+    if shipped is None:
+        print('  the package ships no such file any more.')
+        return 0
+    if ST.normalise(here) == ST.normalise(shipped):
+        print('  identical to what the package ships.')
+        return 0
+    for line in difflib.unified_diff(here.split('\n'), shipped.split('\n'),
+                                     'in the vault', 'from the package', lineterm=''):
+        print('  ' + line)
+    return 0
+
+
+def harvest_mode(root, pkg, answers, arch, o):
+    """`--harvest`: every copied file this vault has changed, against what the package ships.
+
+    R-6. The direction of travel is the whole point: every other mode here asks what the
+    package owes the vault, and this one asks what the vault has that the package has not
+    taken. `GAP-013`'s fix sat correct in a vault for days while the package shipped the defect
+    to everyone including that vault, and it came up only because an upgrade overwrote the file
+    and a count moved.
+
+    Read-only over the vault. The one thing it writes is a row in the package's own log, and
+    that row is what lets `release.py` name the vaults it has not been pointed at lately.
+    """
+    from lib import harvest as H
+
+    rows = _plan_rows(root, pkg, answers, arch, o)
+    unsigned, signed = H.divergences(rows.values())
+
+    print()
+    print('harvest   %d changed here, %d of them signed for'
+          % (len(unsigned) + len(signed), len(signed)))
+
+    if not unsigned and not signed:
+        print('  nothing diverged: every file the package ships into this vault is the one it '
+              'shipped. There is nothing to carry up.')
+
+    for a in unsigned:
+        here = fsplan.read(os.path.join(root, a.rel.replace('/', os.sep)))
+        if here is None:
+            continue
+        diff_against_package(a.rel, a, here, a.reason.split(';')[0])
+
+    if signed:
+        print()
+        print('signed for, and the decision is named:')
+        for a in signed:
+            print('  %s   %s' % (a.rel, a.reason))
+            if o['all']:
+                here = fsplan.read(os.path.join(root, a.rel.replace('/', os.sep)))
+                if here is not None:
+                    diff_against_package(a.rel, a, here)
+        if not o['all']:
+            print('  --all diffs these too. A signature says somebody decided and named the '
+                  'record, not that the divergence holds nothing this package wants.')
+
+    row = H.record(root, VERSION, unsigned, signed)
+    print()
+    print('read at %s on %s. Recorded in %s, which is the only thing `release.py` can name '
+          'vaults from.' % (row['version'], row['date'], H.LOG))
+    print('What this cannot see, named rather than left implied: a generated artefact, which '
+          'has no shipped file to compare against; a file this vault wrote that the package '
+          'does not ship; and any vault nobody has ever run this against.')
+    return 0
+
+
 def file_mode(root, pkg, answers, arch, o):
     """`--diff <path>` and `--adopt <path> --because CHG-NNN`, for a whole file.
 
@@ -149,7 +249,6 @@ def file_mode(root, pkg, answers, arch, o):
     overwritten. What the signature adds is a name, a date and a change record, in place of a
     row that says the engine cannot tell whose the file is.
     """
-    import difflib
     from lib import stamp as ST
 
     path = o['region'].replace(os.sep, '/')
@@ -164,24 +263,7 @@ def file_mode(root, pkg, answers, arch, o):
         return 1
 
     if o['mode'] == 'diff':
-        if not row.content:
-            print('  %s [%s] %s' % (path, row.verdict, row.reason))
-            print('  no diff for this one: it is generated rather than copied, and the body it '
-                  'would be compared against is built inside the plan. --adopt still applies.')
-            return 1
-        shipped = fsplan.read(row.content)
-        print()
-        print('%s   %s' % (path, row.verdict))
-        if shipped is None:
-            print('  the package ships no such file any more.')
-            return 0
-        if ST.normalise(here) == ST.normalise(shipped):
-            print('  identical to what the package ships.')
-            return 0
-        for line in difflib.unified_diff(here.split('\n'), shipped.split('\n'),
-                                         'in the vault', 'from the package', lineterm=''):
-            print('  ' + line)
-        return 0
+        return diff_against_package(path, row, here)
 
     if not o['because']:
         print('  --adopt needs --because CHG-NNN. A divergence with no record behind it '
@@ -387,6 +469,8 @@ def main():
 
     if o['mode'] in ('diff', 'adopt'):
         return region_mode(root, PKG, answers, arch, o)
+    if o['mode'] == 'harvest':
+        return harvest_mode(root, PKG, answers, arch, o)
 
     result = engine.Result()
     plan, L, tier = engine.build_plan(root, PKG, answers, arch, result,

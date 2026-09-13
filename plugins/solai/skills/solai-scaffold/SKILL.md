@@ -26,10 +26,31 @@ py ${CLAUDE_PLUGIN_ROOT}/skills/solai-scaffold/scaffold.py "<vault>" \
    --archetype <minimal|project|personal|role> \
    --answers name=<n> remit=<r> output_language=<en|ru> first_artefact=<f> [partition=A|B]
    [--materials "<file or folder>"] [--apply] [--only <artefact-id,...>]
-   [--force <artefact-id>] [--rollback]
+   [--force <artefact-id>] [--rollback] [--harvest [--all]]
 ```
 
 `--plan` is the default and writes nothing. Always show the plan table before `--apply`.
+
+## Reading a vault back
+
+```
+py ${CLAUDE_PLUGIN_ROOT}/skills/solai-scaffold/scaffold.py "<vault>" --harvest [--all]
+```
+
+Read-only over the vault, and the only mode whose direction of travel is the other way: it
+lists every copied file this vault has changed since the package wrote it and diffs it against
+what the package ships now. Unsigned divergences are diffed by default; a file somebody signed
+for with `--adopt` is listed with its change record, and `--all` diffs those too, because a
+signature says somebody decided, not that the divergence holds nothing this package wants.
+
+It writes one row into the package's own log saying which vault was read at which version, and
+`release.py` prints from that log before its gates. Run it against every vault you look after
+before cutting a release, and relay what it prints verbatim: a diff is evidence, and deciding
+what to carry up is judgement that belongs to a session, not to this script.
+
+Two things it cannot see, and they are printed on every run rather than left implied: a
+generated artefact, which has no shipped file to compare against, and a vault nobody has ever
+run it against.
 
 `--materials` is repeatable. Each path is a file or a folder of documents prepared for the
 vault; every file lands as a COPY row in the plan, in the folder the archetype declares for

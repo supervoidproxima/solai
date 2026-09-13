@@ -97,10 +97,13 @@ The governed tier's org layer; `counsel` as its own skill (its assertions ship i
 so the guard exists from day one); HTML org maps. Each is recorded as deferred rather than left
 implied, because an undeclared deferral is the same defect as an undeclared write.
 
-The harvest loop, which pulls a lesson from a live vault back into the package, stopped being one
-of them on 2026-09-13. It was deferred for four releases and cost a fix that lived correct in a
-vault for days while the package shipped the defect to everyone, that vault included. `R-6` now
-names what it is: a verb that reads every copied file a vault has changed and prints the diff.
+The harvest loop was one of them until 2026-09-13 and is now built. It was deferred for four
+releases and cost a fix that lived correct in a vault for days while the package shipped the
+defect to everyone, that vault included. `scaffold.py "<vault>" --harvest` reads every copied
+file a vault has changed since the package wrote it and diffs it against what the package ships
+now; `release.py` names, before its gates, every vault it has been pointed at and has not read
+since an older version. What it does not solve is said out loud rather than left implied:
+somebody still has to run it, and a package cannot discover a vault it was never told about.
 
 The `personal` and `role` archetypes were deferred at v0.1.0 and built at v0.2.0. Neither
 needed a line of `lib/` changed, which was the test they were there to run.
