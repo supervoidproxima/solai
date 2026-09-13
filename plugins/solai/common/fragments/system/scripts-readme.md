@@ -27,6 +27,10 @@ They share `_wikilink.py` the same way: what a wikilink looks like, spelled once
 `\|` a table cell requires reads as an alias separator in every script here rather than in
 some of them.
 
+And `_pagestamp.py`: what a stamp on a generated HTML page is. `gen_dashboard.py` writes one and
+`stamp_check.py` reads it, and the digest is taken over the page with its own digest blanked, so
+that a reader holding the finished file can reproduce exactly what the writer hashed.
+
 A **generator** owns its output completely: it may be deleted and rebuilt, and anything
 hand-added to its output is lost on the next run. A **check** writes nothing and exits
 non-zero on the one condition it is named for. Nothing in this folder deletes a file (D19):

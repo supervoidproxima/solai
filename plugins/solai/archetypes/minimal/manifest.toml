@@ -80,7 +80,7 @@ id    = "scripts"
 path  = "_system/scripts/"
 mode  = "copied"
 from  = "runtime/"
-files = ["_args.py", "_wikilink.py", "check_links.py", "gen_dashboard.py"]
+files = ["_args.py", "_wikilink.py", "_pagestamp.py", "check_links.py", "gen_dashboard.py"]
 
 [[artefacts]]
 id       = "chg-001"

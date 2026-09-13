@@ -29,6 +29,7 @@ import test_compiled
 import test_harvest                                                 # noqa: E402
 import test_decl                                                    # noqa: E402
 import test_kb                                                      # noqa: E402
+import test_pagestamp                                               # noqa: E402
 import test_primitives                                              # noqa: E402
 import test_release                                                 # noqa: E402
 import test_sensitive                                               # noqa: E402
@@ -38,7 +39,7 @@ import test_workflows                                               # noqa: E402
 
 MODULES = (test_primitives, test_decl, test_compiled, test_agents, test_workflows,
            test_authoring, test_ui, test_kb, test_sensitive, test_change, test_release,
-           test_args, test_wikilink, test_harvest)
+           test_args, test_wikilink, test_harvest, test_pagestamp)
 
 
 def main():

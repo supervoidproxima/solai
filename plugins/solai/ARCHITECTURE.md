@@ -139,6 +139,14 @@ every table read as broken: 1,808 reported defects on one vault where there were
 pattern had lived in that vault's own copy of `check_links.py` for days, which is what the rule
 being written five times costs.
 
+And `_pagestamp.py`, a third time, for the stamp a generated HTML page carries. Here the two
+places that need the rule are necessarily different files, a writer and a reader, which is what
+made the drift total rather than partial: `gen_dashboard.py` hashed the page with a placeholder
+still in it and printed the digest as bare text, and `stamp_check.py` read no `.html` at all, so
+every vault held one artefact whose integrity nothing checked and it was the one anybody opens.
+The digest is taken over the document with its own digest blanked, because a file cannot contain
+the hash of itself and blanking is the only state both sides can reach.
+
 ## 6. Knowledge
 
 `skills/solai-kb/` builds a `kb/` out of a vault: one record per citable unit, a SQLite

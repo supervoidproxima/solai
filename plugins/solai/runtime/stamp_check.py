@@ -5,7 +5,7 @@ Copied verbatim into `<vault>/_system/scripts/` so the check survives without th
 
     py stamp_check.py <vault-root> [--json]
 
-Walks every `.md` and `.base` carrying a `generated-by:` stamp and reports one of:
+Walks every `.md`, `.base`, `.js` and `.html` carrying a stamp and reports one of:
 
     CLEAN        body matches its stamp
     HAND-EDITED  body does not. A defect: the next regeneration would silently discard it
@@ -27,6 +27,7 @@ import sys
 # than by package, because these scripts are copied into a vault and run standalone.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _args                                                        # noqa: E402
+import _pagestamp                                                   # noqa: E402
 
 USAGE = '''\
 usage: stamp_check.py [<vault>] [--json]
@@ -125,7 +126,7 @@ def scan(root):
                 rel_dir == s or rel_dir.startswith(s + '/') for s in CLAUDE_SUBTREES):
             continue
         for name in filenames:
-            if not name.endswith(('.md', '.base', '.js')):
+            if not name.endswith(('.md', '.base', '.js', '.html')):
                 continue
             path = os.path.join(dirpath, name)
             try:
@@ -133,9 +134,23 @@ def scan(root):
                     text = fh.read()
             except (OSError, UnicodeDecodeError):
                 continue
+            rel = os.path.relpath(path, root).replace(os.sep, '/')
+            # An HTML file has no frontmatter to hold `body-sha` in, so its stamp lives in a
+            # comment and is read over the document with its own digest blanked. `_pagestamp`
+            # holds that rule for the generator that writes it and for this, which reads it:
+            # the two halves living apart is how the dashboard came to carry a digest that
+            # nothing on earth could check. `GAP-016`.
+            page = _pagestamp.read(text)
+            if page is not None:
+                dec, act = page
+                findings.append({
+                    'path': rel,
+                    'state': 'CLEAN' if dec == act else 'HAND-EDITED',
+                    'declared': dec, 'actual': act,
+                })
+                continue
             fm_text, body = _split(text)
             declared = _field(fm_text, 'body-sha')
-            rel = os.path.relpath(path, root).replace(os.sep, '/')
             if declared:
                 actual = _hash(body, name.endswith('.base'))
                 findings.append({

@@ -66,6 +66,7 @@ Newest first. The CHANGELOG row is the full account; this is the index.
 
 | Version | What | Row |
 |---|---|---|
+| 0.38.0 | the dashboard carries a stamp and the checker reads it, spelled once for the writer and the reader | 73 |
 | 0.37.0 | the package reads back what a vault changed in a file it ships, and the release names the vaults it has not read | 72 |
 | 0.36.2 | both sides of a signature come off the row that compares them | 71 |
 | 0.36.1 | the sha a signature carries is handed over by the plan, not worked out again | 70 |
