@@ -32,6 +32,11 @@
 .PARAMETER ConfigRepo
   The private configuration repository, as owner/name. Default: the constant below.
 
+.PARAMETER OneDriveRoot
+  Force which OneDrive folder to use, when a machine has more than one (personal plus one per
+  work tenant) and the automatic ranking picks the wrong one. Pass the folder itself, e.g.
+  -OneDriveRoot "C:\Users\you\OneDrive - Contoso". Skips detection and ranking entirely.
+
 .EXAMPLE
   irm https://raw.githubusercontent.com/supervoidproxima/solai/main/install.ps1 | iex
 
@@ -46,11 +51,45 @@ param(
   [switch] $NoHandoff,
   [switch] $CloseWhenDone,
   [string] $PackageRepo = 'supervoidproxima/solai',
-  [string] $ConfigRepo  = 'supervoidproxima/claude-config'
+  [string] $ConfigRepo  = 'supervoidproxima/claude-config',
+  [string] $OneDriveRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+# Windows PowerShell 5.1 defaults to whatever TLS version the OS ships with, which on an older
+# or locked-down corporate image can be TLS 1.0/1.1. GitHub, raw.githubusercontent.com and
+# claude.ai all require TLS 1.2+, so a machine stuck on an older default fails every download in
+# this script with an opaque "could not create SSL/TLS secure channel" - and does it silently,
+# because that exception is thrown deep inside Invoke-WebRequest/Invoke-RestMethod. Force it on
+# for this process only; this does not change anything machine-wide.
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch { }
+
+# A corporate proxy, an SSL-inspecting firewall, or endpoint-protection software killing a child
+# process mid-download all surface the same way here: an uncaught terminating error under
+# `$ErrorActionPreference = 'Stop'`, which under `irm | iex` ends the whole script on the spot -
+# the window just stops, with little or no explanation of which line or which stage. This trap
+# turns that into a reported, non-fatal stage failure and lets the remaining stages still run,
+# so one blocked download does not hide every stage after it.
+trap {
+  $err = $_
+  Write-Host ''
+  Write-Host ("      failed      unexpected error: {0}" -f $err.Exception.Message) -ForegroundColor Red
+  if ($err.Exception.InnerException) {
+    Write-Host ("                 caused by: {0}" -f $err.Exception.InnerException.Message) -ForegroundColor Red
+  }
+  Write-Host ("                 at: {0}" -f $err.InvocationInfo.PositionMessage) -ForegroundColor DarkGray
+  if (Get-Variable -Name Todo -Scope Script -ErrorAction SilentlyContinue) {
+    $script:Todo.Add(("a stage was interrupted by an unexpected error - see the red text above; " +
+      "if this mentions SSL/TLS, a certificate, or times out, your network is very likely " +
+      "intercepting or blocking the connection and IT needs to allowlist github.com, " +
+      "raw.githubusercontent.com, objects.githubusercontent.com and claude.ai")) | Out-Null
+  }
+  continue
+}
 
 # Native tools write progress and notices to stderr. Under 'Stop' that becomes a terminating
 # error and the script dies on a line that was not a failure at all: on a fresh machine the
@@ -85,6 +124,66 @@ function Invoke-Native {
     $script:NativeExit = 1
   } finally {
     $ErrorActionPreference = $saved
+  }
+  return (($out | Out-String).Trim())
+}
+
+# Separate from Invoke-Native on purpose: giving the shared helper an extra positional
+# parameter shifted every other call site's argument binding (e.g. `Invoke-Native 'gh' 'auth'
+# 'token' ...` started trying to bind the string 'auth' to an int timeout). Kept apart, and
+# always called with -TimeoutSec by name, so nothing else can collide with it.
+function Invoke-NativeTimed {
+  param(
+    [Parameter(Mandatory)] [string] $Exe,
+    [Parameter(Mandatory)] [int] $TimeoutSec,
+    [object[]] $Arguments
+  )
+  $argv = @()
+  foreach ($a in $Arguments) { $argv += @($a) }
+  $argv = [string[]] @($argv | Where-Object { $null -ne $_ })
+  # Endpoint-protection software or a hidden elevation prompt can wedge a native process
+  # forever with no error at all - the run just stops advancing. A background job can be
+  # killed on a deadline where a plain `&` call cannot. The job hands back the exit code
+  # along with the output, because job state does not carry it: a native command that exits
+  # 1602 still leaves the job 'Completed', so reading state as success would report a package
+  # as installed when the elevation prompt was dismissed, and would make that 1602 branch
+  # below unreachable.
+  $job = Start-Job -ScriptBlock {
+    param($e, $a)
+    $text = (& $e @a 2>&1 | Out-String)
+    [pscustomobject]@{ Text = $text; Code = $LASTEXITCODE }
+  } -ArgumentList $Exe, $argv
+  $saved = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    if (Wait-Job $job -Timeout $TimeoutSec) {
+      $result  = @(Receive-Job $job -ErrorAction SilentlyContinue)
+      $payload = @($result | Where-Object { $_ -and ($_.PSObject.Properties.Name -contains 'Code') })
+      if ($payload.Count -gt 0) {
+        $out  = [string] $payload[-1].Text
+        $code = $payload[-1].Code
+        # No exit code means no native process ever ran - a missing executable, say, whose
+        # error went to the job's error stream while the job itself still finished tidily.
+        # Reading that as zero would report a successful install of nothing.
+        $script:NativeExit = if ($null -eq $code) { 1 } else { [int] $code }
+        if (-not $out) {
+          $errs = @($job.ChildJobs | ForEach-Object { $_.Error } | ForEach-Object { $_.ToString() })
+          if ($errs.Count -gt 0) { $out = ($errs -join [Environment]::NewLine) }
+        }
+      } else {
+        # The job never got as far as reporting: a missing executable, or the process killed
+        # under it. Nothing ran to completion, so this is a failure however it is spelled.
+        $out = ($result | Out-String)
+        $script:NativeExit = 1
+      }
+    } else {
+      Stop-Job $job -ErrorAction SilentlyContinue
+      $out = "timed out after $TimeoutSec seconds - likely a hidden elevation prompt or endpoint-protection software holding the process"
+      $script:NativeExit = -1
+    }
+  } finally {
+    $ErrorActionPreference = $saved
+    Remove-Job $job -Force -ErrorAction SilentlyContinue
   }
   return (($out | Out-String).Trim())
 }
@@ -128,32 +227,53 @@ Write-Stage 'preflight'
 # folder too, so taking the first match is not enough: on a machine whose personal OneDrive holds
 # a few leftover vaults and whose work tenant holds every real one, first-match pointed the guided
 # page at the wrong root. Rank instead - a root that already holds a solai place wins, then the
-# root with the most vaults in it, and the discovery order breaks any remaining tie.
-$oneDriveRoots = @(Get-ChildItem $env:USERPROFILE -Directory -Filter 'OneDrive*' -ErrorAction SilentlyContinue |
-                   Select-Object -ExpandProperty FullName)
-foreach ($e in @($env:OneDriveCommercial, $env:OneDrive)) {
-  if ($e -and ($oneDriveRoots -notcontains $e)) { $oneDriveRoots += $e }
-}
+# root with the most vaults in it, and the discovery order breaks any remaining tie. This is a
+# guess, not a certainty, so it is always shown; pass -OneDriveRoot to skip guessing entirely.
 $vaultRoot = $null
 $onedrive  = $null
-$ranked    = @()
-for ($i = 0; $i -lt $oneDriveRoots.Count; $i++) {
-  $root      = $oneDriveRoots[$i]
-  $candidate = Join-Path $root 'Obsidian Vaults'
-  if (-not (Test-Path $candidate)) { continue }
-  $vaults = @(Get-ChildItem $candidate -Directory -ErrorAction SilentlyContinue)
-  $places = @($vaults | Where-Object { Test-Path (Join-Path $_.FullName '_system/os/answers.toml') })
-  $ranked += [pscustomobject]@{ Root = $root; Vaults = $candidate; Places = $places.Count; Count = $vaults.Count; Order = $i }
-}
-if ($ranked.Count -gt 0) {
-  $best = @($ranked | Sort-Object @{ Expression = 'Places'; Descending = $true },
-                                  @{ Expression = 'Count';  Descending = $true },
-                                  @{ Expression = 'Order';  Descending = $false })[0]
-  $onedrive  = $best.Root
-  $vaultRoot = $best.Vaults
-} elseif ($oneDriveRoots.Count -gt 0) {
-  $onedrive  = $oneDriveRoots[0]
-  $vaultRoot = Join-Path $onedrive 'Obsidian Vaults'
+if ($OneDriveRoot) {
+  if (-not (Test-Path $OneDriveRoot)) {
+    Say 'failed' ("-OneDriveRoot does not exist: {0}" -f $OneDriveRoot)
+    # Carried into the summary, or stage 6 ends the run advising a OneDrive sign-in on a
+    # machine already signed in, when the only thing wrong was the path typed on the command
+    # line.
+    Need ("re-run with a -OneDriveRoot that exists: the one passed ({0}) was not found, so this run has no OneDrive folder" -f $OneDriveRoot)
+  } else {
+    $onedrive  = $OneDriveRoot
+    $vaultRoot = Join-Path $onedrive 'Obsidian Vaults'
+    Say 'ok' ("using -OneDriveRoot: {0}" -f $onedrive)
+  }
+} else {
+  $oneDriveRoots = @(Get-ChildItem $env:USERPROFILE -Directory -Filter 'OneDrive*' -ErrorAction SilentlyContinue |
+                     Select-Object -ExpandProperty FullName)
+  foreach ($e in @($env:OneDriveCommercial, $env:OneDrive)) {
+    if ($e -and ($oneDriveRoots -notcontains $e)) { $oneDriveRoots += $e }
+  }
+  $ranked = @()
+  for ($i = 0; $i -lt $oneDriveRoots.Count; $i++) {
+    $root      = $oneDriveRoots[$i]
+    $candidate = Join-Path $root 'Obsidian Vaults'
+    if (-not (Test-Path $candidate)) { continue }
+    $vaults = @(Get-ChildItem $candidate -Directory -ErrorAction SilentlyContinue)
+    $places = @($vaults | Where-Object { Test-Path (Join-Path $_.FullName '_system/os/answers.toml') })
+    $ranked += [pscustomobject]@{ Root = $root; Vaults = $candidate; Places = $places.Count; Count = $vaults.Count; Order = $i }
+  }
+  if ($oneDriveRoots.Count -gt 1) {
+    Say 'ok' ("found {0} OneDrive folders - pass -OneDriveRoot to pick one directly if the guess below is wrong:" -f $oneDriveRoots.Count)
+    foreach ($r in $oneDriveRoots) { Write-Host ("                 - {0}" -f $r) -ForegroundColor DarkGray }
+  }
+  if ($ranked.Count -gt 0) {
+    $best = @($ranked | Sort-Object @{ Expression = 'Places'; Descending = $true },
+                                    @{ Expression = 'Count';  Descending = $true },
+                                    @{ Expression = 'Order';  Descending = $false })[0]
+    $onedrive  = $best.Root
+    $vaultRoot = $best.Vaults
+    Say 'ok' ("picked {0} ({1} solai place(s), {2} vault folder(s) total)" -f $onedrive, $best.Places, $best.Count)
+  } elseif ($oneDriveRoots.Count -gt 0) {
+    $onedrive  = $oneDriveRoots[0]
+    $vaultRoot = Join-Path $onedrive 'Obsidian Vaults'
+    Say 'ok' ("no 'Obsidian Vaults' folder found in any of them yet - defaulting to {0}" -f $onedrive)
+  }
 }
 $claudeDir = Join-Path $env:USERPROFILE '.claude'
 $marketDir = Join-Path $claudeDir 'plugins\marketplaces\solai'
@@ -268,12 +388,13 @@ if ($SkipApps) {
   foreach ($p in $packages) {
     if ($p.Have) { Say 'ok' $p.Name; continue }
     Write-Host ("      installing  {0} - approve the elevation prompt when Windows asks ..." -f $p.Name) -ForegroundColor DarkGray
-    $null = Invoke-Native 'winget' 'install' '--id' $p.Id '--exact' '--silent' '--accept-package-agreements' '--accept-source-agreements'
+    $out = Invoke-NativeTimed -Exe 'winget' -TimeoutSec 300 -Arguments @('install', '--id', $p.Id, '--exact', '--silent', '--accept-package-agreements', '--accept-source-agreements')
     switch ($script:NativeExit) {
       0       { Say 'installed' $p.Name }
       # 1602 is the MSI code for "cancelled at the prompt", which on this path means the UAC
       # dialog was dismissed rather than anything being wrong with the package.
       1602    { Need ("{0}: the elevation prompt was dismissed. Run: winget install --id {1}" -f $p.Name, $p.Id) }
+      -1      { Need ("{0}: {1}. Try running as administrator, or install by hand: winget install --id {2}" -f $p.Name, $out, $p.Id) }
       default { Need ("install {0} by hand (exit {2}): winget install --id {1}" -f $p.Name, $p.Id, $script:NativeExit) }
     }
   }
@@ -285,18 +406,52 @@ Write-Stage 'Claude Code'
 
 if (Have 'claude') {
   Say 'ok' ("already installed: " + (Invoke-Native 'claude' '--version'))
+} elseif (Have 'npm') {
+  # Preferred path when npm is present: an ordinary `npm install -g` is a completely normal
+  # action that corporate antivirus/EDR does not flag. The alternative below - download a
+  # script to disk, then execute it - is the textbook "dropper" pattern, and on a locked-down
+  # corporate machine it can get the downloaded file itself deleted mid-run before it ever
+  # finishes, which is silent and looks like nothing happened.
+  Write-Host '      installing via npm ...' -ForegroundColor DarkGray
+  $out = Invoke-Native 'npm' 'install' '-g' '--allow-scripts=@anthropic-ai/claude-code' '@anthropic-ai/claude-code'
+  if ($script:NativeExit -ne 0) {
+    Say 'failed' ('npm install failed: ' + $out)
+    Need 'install Claude Code by hand: npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code'
+  } else {
+    # npm's global bin folder is not always on PATH yet in this session (or ever, on a machine
+    # that just got npm for the first time), which is what makes `claude` "not recognized"
+    # right after a successful install.
+    $npmBin = Invoke-Native 'npm' 'config' 'get' 'prefix'
+    if ($npmBin -and (($env:PATH -split ';') -notcontains $npmBin)) {
+      $env:PATH = $env:PATH.TrimEnd(';') + ';' + $npmBin
+      $userPath = [string] [Environment]::GetEnvironmentVariable('PATH', 'User')
+      if (($userPath -split ';') -notcontains $npmBin) {
+        [Environment]::SetEnvironmentVariable('PATH', ($userPath.TrimEnd(';') + ';' + $npmBin).TrimStart(';'), 'User')
+      }
+    }
+    if (Have 'claude') {
+      Say 'installed' (Invoke-Native 'claude' '--version')
+    } else {
+      Say 'installed' 'via npm, but not found on PATH yet'
+      Need ("open a new terminal so PATH picks up npm's global folder ({0}), then run claude --version" -f $npmBin)
+    }
+  }
 } else {
-  # The native installer needs no elevation and keeps itself updated afterwards. It runs in a
-  # child process rather than as `irm | iex`: this script is itself piped into `iex`, so a nested
-  # `iex` inherits the outer pipeline's stdin and the inner installer stalls with the stage
-  # half-printed and nothing further. A file plus a child process give it a console of its own.
+  # No npm on this machine: fall back to the native installer. This does the download-then-run
+  # thing that corporate EDR can flag, so a stall or a silently-deleted temp file here is a real
+  # possibility on a locked-down machine - that is a network/security-policy problem, not a bug
+  # in this script, and the fix is an IT allowlist/exclusion, not a retry.
   $shell     = if (Have 'pwsh') { 'pwsh' } else { 'powershell' }
   $installer = Join-Path ([System.IO.Path]::GetTempPath()) 'claude-install.ps1'
   try {
-    Invoke-WebRequest 'https://claude.ai/install.ps1' -UseBasicParsing -OutFile $installer
+    Invoke-WebRequest 'https://claude.ai/install.ps1' -UseBasicParsing -OutFile $installer -TimeoutSec 30
     $null = Invoke-Native $shell '-NoProfile' '-ExecutionPolicy' 'Bypass' '-File' $installer
   } catch {
-    Say 'action' ('could not fetch the Claude Code installer: ' + $_.Exception.Message)
+    $detail = $_.Exception.Message
+    if ($_.Exception.InnerException) { $detail = $detail + ' / ' + $_.Exception.InnerException.Message }
+    Say 'failed' ('could not fetch the Claude Code installer: ' + $detail)
+    Need ('install Claude Code by hand once network access is sorted: irm https://claude.ai/install.ps1 | iex' +
+          ' (if that error mentioned SSL/TLS, a certificate, or a timeout, ask IT to allowlist claude.ai)')
   } finally {
     Remove-Item $installer -Force -ErrorAction SilentlyContinue
   }
@@ -305,7 +460,8 @@ if (Have 'claude') {
     $env:Path = "$local;$env:Path"
     Say 'installed' (Invoke-Native 'claude' '--version')
   } else {
-    Need 'install Claude Code by hand: irm https://claude.ai/install.ps1 | iex'
+    Need ('install Claude Code by hand: npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code' +
+          ' (if that temp file vanished mid-run, your antivirus/EDR deleted it - ask IT for an exclusion, or use the npm command here instead)')
   }
 }
 
