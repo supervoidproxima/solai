@@ -35,7 +35,7 @@ INSTALLER = os.path.join(REPO, 'install.ps1')
 sys.path.insert(0, HERE)
 from harness import Suite                                           # noqa: E402
 
-EXPECTED = 17
+EXPECTED = 28
 NAME = 'install'
 
 PS = 'powershell'
@@ -80,6 +80,14 @@ def bare_profile():
         'OneDrive': None,
         'OneDriveCommercial': None,
     }
+
+
+def field(out, key):
+    """The value a probe printed as `KEY=value`, or '' if it never printed one."""
+    for line in out.splitlines():
+        if line.startswith(key + '='):
+            return line[len(key) + 1:].strip()
+    return ''
 
 
 def tree(path):
@@ -217,7 +225,143 @@ def group_helpers(s):
          'HAVE_REAL=True' in out and 'HAVE_FAKE=False' in out, out[-300:])
 
 
-GROUPS = (group_shape, group_dry_run, group_bare, group_helpers)
+def group_timed(s):
+    """Invoke-NativeTimed, the helper that runs winget on a deadline.
+
+    Dot-sourced like `group_helpers`, and against the real definition for the same reason: a
+    copy of a helper passes long after the original has stopped agreeing with it. The exit
+    code is what every assertion here is really about. A background job reports its own
+    state, and a native command that fails leaves that state 'Completed' all the same, so a
+    helper that reads state as success reports an install that never happened.
+    """
+    probe = (
+        '. "%s" -DryRun *> $null; '
+        '$ok = Invoke-NativeTimed -Exe "cmd.exe" -TimeoutSec 60 -Arguments @("/c","echo hello"); '
+        'Write-Output ("EXITOK=" + $script:NativeExit); '
+        'Write-Output ("OUTOK=" + $ok); '
+        # 1602 is the code winget returns when the elevation prompt is dismissed, which stage 1
+        # tells the reader how to recover from. It is a plain non-zero exit, not an error: the
+        # job finishes tidily and says nothing about it.
+        '$null = Invoke-NativeTimed -Exe "cmd.exe" -TimeoutSec 60 -Arguments @("/c","exit 1602"); '
+        'Write-Output ("EXIT1602=" + $script:NativeExit); '
+        '$t = Get-Date; '
+        '$slow = Invoke-NativeTimed -Exe "cmd.exe" -TimeoutSec 3 -Arguments @("/c","ping -n 30 127.0.0.1 >nul"); '
+        'Write-Output ("EXITSLOW=" + $script:NativeExit); '
+        'Write-Output ("SLOWSAID=" + $(if ($slow -match "timed out") { "yes" } else { "no" })); '
+        'Write-Output ("ELAPSED=" + [int]((Get-Date) - $t).TotalSeconds); '
+        # A missing executable never sets an exit code at all. The job still finishes, so an
+        # absent code has to be read as failure or the summary reports a successful install of
+        # nothing.
+        '$miss = Invoke-NativeTimed -Exe "solai-not-a-command-xyz" -TimeoutSec 60 -Arguments @("x"); '
+        'Write-Output ("EXITMISS=" + $script:NativeExit); '
+        'Write-Output ("MISSSAID=" + $(if ($miss) { "yes" } else { "no" }))'
+    ) % INSTALLER
+    code, out = run_ps(probe)
+
+    s.ok('IN-18', 'a timed command that succeeds reports zero and hands back its output',
+         field(out, 'EXITOK') == '0' and 'hello' in field(out, 'OUTOK'), out[-300:])
+    s.eq('IN-19', "a failing command's own exit code is reported, not the job's state",
+         field(out, 'EXIT1602'), '1602')
+
+    elapsed = field(out, 'ELAPSED')
+    s.ok('IN-20', 'a command that outruns its deadline is killed, named, and not waited out',
+         field(out, 'EXITSLOW') == '-1' and field(out, 'SLOWSAID') == 'yes'
+         and elapsed.isdigit() and int(elapsed) < 20,
+         'exit %r, named %r, %r seconds against a 3 second deadline over a 30 second command'
+         % (field(out, 'EXITSLOW'), field(out, 'SLOWSAID'), elapsed))
+
+    s.ok('IN-21', 'a missing executable is a failure with a reason, not a silent success',
+         field(out, 'EXITMISS') not in ('', '0') and field(out, 'MISSSAID') == 'yes',
+         'exit %r, explained %r' % (field(out, 'EXITMISS'), field(out, 'MISSSAID')))
+
+
+def group_network(s):
+    """The two guards that exist because of what a managed image does to a download."""
+    code, out = run_ps(
+        '. "%s" -DryRun *> $null; Write-Output ("TLS=" + $(if (([Net.ServicePointManager]'
+        '::SecurityProtocol -band [Net.SecurityProtocolType]::Tls12) -ne 0) {"yes"} else {"no"}))'
+        % INSTALLER)
+    # A fresh 5.1 process starts on SystemDefault, which reads as 0 here, so this says the
+    # script turned TLS 1.2 on rather than that the machine happened to be there already.
+    # Without it, an image pinned to 1.0/1.1 fails every download with an SSL/TLS message
+    # thrown from inside Invoke-WebRequest, where nothing in this script was catching it.
+    s.eq('IN-22', 'TLS 1.2 is on for the process before anything is downloaded',
+         field(out, 'TLS'), 'yes')
+
+    # The trap cannot be provoked from outside: it exists for errors this script does not
+    # raise on a working machine. Injecting one into a COPY is the only way to watch it work,
+    # and the copy is what proves the run continues rather than ending on the spot, which is
+    # what `irm | iex` does with an uncaught terminating error.
+    body = open(INSTALLER, encoding='utf-8').read()
+    anchor = "Write-Stage 'preflight'"
+    root = tempfile.mkdtemp(prefix='solai-trap-')
+    try:
+        copy = os.path.join(root, 'install.ps1')
+        with open(copy, 'w', encoding='utf-8', newline='') as fh:
+            fh.write(body.replace(anchor, anchor + "\nthrow 'solai-test-boom'", 1))
+        code, out = run_ps('& "%s" -DryRun' % copy)
+        s.ok('IN-23', 'an unexpected terminating error is reported, with its message',
+             'unexpected error' in out and 'solai-test-boom' in out, out[-400:])
+        s.ok('IN-24', 'and the rest of the run still happens, instead of the window stopping',
+             code == 0 and 'Nothing was written' in out, 'exit %s: %s' % (code, out[-400:]))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def group_onedrive(s):
+    """-OneDriveRoot: the answer for a machine carrying one root per work tenant."""
+    root = tempfile.mkdtemp(prefix='solai-od-')
+    try:
+        code, out = run_ps('& "%s" -DryRun -OneDriveRoot "%s"' % (INSTALLER, root))
+        s.ok('IN-25', 'an explicit -OneDriveRoot is taken as given, and ranking is skipped',
+             ('using -OneDriveRoot: ' + root) in out and 'picked ' not in out, out[:600])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+    missing = os.path.join(tempfile.gettempdir(), 'solai-no-such-onedrive-xyz')
+    code, out = run_ps('& "%s" -DryRun -OneDriveRoot "%s"' % (INSTALLER, missing))
+    # Red text alone would leave stage 6 closing the run with "sign in to OneDrive" on a
+    # machine already signed in, when the only thing wrong was the path that was typed.
+    s.ok('IN-26', 'a -OneDriveRoot that does not exist becomes an action, not just red text',
+         'does not exist' in out and 'action' in out and missing in out, out[:600])
+
+
+def group_claude_code(s):
+    """Stage 2 cannot run here - it installs Claude Code for real - so its order is gated
+    statically. The order is the whole change: an ordinary global npm install is not what
+    endpoint protection deletes mid-run, and downloading a script to disk to run it is."""
+    body = open(INSTALLER, encoding='utf-8').read()
+    npm = body.find("Have 'npm'")
+    fetch = body.find('https://claude.ai/install.ps1')
+    s.ok('IN-27', 'npm is tried before the download-and-run fallback',
+         npm != -1 and fetch != -1 and npm < fetch,
+         'npm branch at %s, the fetch at %s' % (npm, fetch))
+
+    # The fetch used to fail with one line on screen and nothing in the summary, on the stage
+    # whose failure makes every stage after it pointless.
+    # Bounded by the `finally` that closes the catch, not by a character count: the branch
+    # after it carries a Need of its own, and a window wide enough to include it stays green
+    # when the one in the catch is deleted.
+    end = body.find('} finally {', fetch) if fetch != -1 else -1
+    tail = body[fetch:end] if end != -1 else ''
+    s.ok('IN-28', 'a fetch that fails reaches the summary, not only the screen',
+         "Say 'failed'" in tail and 'Need (' in tail,
+         'the catch around the fallback download, %d characters of it' % len(tail))
+
+
+GROUPS = (group_shape, group_dry_run, group_bare, group_helpers,
+          group_timed, group_network, group_onedrive, group_claude_code)
+
+
+def printable(text):
+    """Text the console can actually take.
+
+    A failure detail can carry PowerShell's own error message, which on a non-English Windows
+    is not encodable in the console codepage. That crashed the report where it lists failures
+    - the one moment it has to work - and lost every line of it.
+    """
+    enc = getattr(sys.stdout, 'encoding', None) or 'utf-8'
+    return text.encode(enc, 'replace').decode(enc, 'replace')
 
 
 def main():
@@ -232,7 +376,7 @@ def main():
     print('')
     print('  ' + head)
     if lines:
-        print(lines)
+        print(printable(lines))
     print('')
     print('  ' + ('INSTALL GATE GREEN' if suite.green() else 'INSTALL GATE RED'))
     return 0 if suite.green() else 1

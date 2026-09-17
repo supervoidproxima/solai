@@ -12,7 +12,7 @@ knows nothing about this conversation should be able to continue from here.
 |---|---|---|
 | `py tests/run_tests.py` | The package: primitives, declarations, agents, workflows, authoring, the surface | 239 assertions |
 | `py tests/verify_engine.py` | Four kinds scaffolded, applied, re-planned, checked, then probed with a real hand edit | NOOP 6 / 42 / 30 / 34 |
-| `py tests/verify_install.py` | `install.ps1`: stage 0, the helpers, the promise that a dry run writes nothing, strict-mode hazards | 17 assertions |
+| `py tests/verify_install.py` | `install.ps1`: stage 0, the helpers, the promise that a dry run writes nothing, strict-mode hazards, and the guards a managed image needs (TLS, the trap, the winget deadline, `-OneDriveRoot`) | 28 assertions |
 
 The runner refuses a run whose assertion count does not match its declaration, so a deleted
 assertion fails as loudly as a broken one.
@@ -48,8 +48,34 @@ All sixteen were mutation-tested before being kept:
 | The stage total drifts from the documented eight | `IN-03` |
 | The dry run stops promising it wrote nothing | `IN-06` |
 
+Eleven more were added when the installer met a machine that blocked it, and each was shown
+red the same way:
+
+| Mutation | Went red |
+|---|---|
+| `Invoke-NativeTimed` reads the job's state as the exit code | `IN-19`, `IN-21` - the defect it was written for: a native command that exits 1602 leaves the job `Completed`, so a dismissed elevation prompt reported a finished install |
+| A missing exit code is read as zero | `IN-21` |
+| The deadline comes off the wait | `IN-20` |
+| The timed helper's output is dropped | `IN-18` |
+| TLS 1.2 is no longer forced | `IN-22` |
+| The trap is removed | `IN-23`, `IN-24` |
+| `-OneDriveRoot` is ignored | `IN-25`, `IN-26` |
+| A `-OneDriveRoot` that does not exist is printed but not carried into the summary | `IN-26` |
+| The npm branch is gone | `IN-27` |
+| The fallback's fetch failure is printed but not carried | `IN-28` |
+
+Two of those went green on the first attempt and the assertions were rewritten, not the
+mutations. `IN-28` was reading a fixed 1200 characters past the fetch, which swept in the
+`Need` of the branch after the catch; it is bounded by the `finally` now. `IN-23` and `IN-24`
+were red all along and the report crashed before printing them, because a failure detail
+carrying PowerShell's own localised error text is not encodable in a cp1251 console. The
+report encodes with `replace` now: a gate that cannot print its failures is green and red at
+the same time.
+
 **Rule for whoever extends this: never run `install.ps1` in a test without `-DryRun`.** Stage 2
-fetches and installs Claude Code for real.
+fetches and installs Claude Code for real. Two of the new assertions work on a copy instead:
+the trap only fires on an error the script does not raise on a working machine, so the error
+is injected into a temporary copy of the file and the original is never run with it.
 
 ---
 
